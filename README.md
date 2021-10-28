@@ -2,7 +2,7 @@
 - 👀 I’m interested in programing and Network Automation with Python and Golang.
 - 🌱 I’m currently learning #Golang and I beleive it's incredible!
 - 💞️ You will find some of my projects in this repository.
-- 📫 How to reach me via naseredin.aramnejad@gmail.com
+- 📫 You can reach me via naseredin.aramnejad@gmail.com
 
 <!---
 naseriax/naseriax is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
