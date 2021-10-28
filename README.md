@@ -5,4 +5,5 @@
 
 
 - Usage:
-- # go run gotdr.go
+
+"go run gotdr.go"
