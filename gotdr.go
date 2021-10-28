@@ -15,8 +15,10 @@ import (
 	"time"
 )
 
+//Speed of light in vaccuum.
 const lightSpeed = 299.79181901
 
+//This is the struct wrapping all the extracted information and being exported as JSON
 type otdrData struct {
 	Supplier        supPram
 	GenInfo         genParams
@@ -27,6 +29,7 @@ type otdrData struct {
 	TotalLoss_dB    string
 }
 
+//Supplier Params extracted from the sor file
 type supPram struct {
 	OtdrSupplier   string
 	OtdrName       string
@@ -37,6 +40,7 @@ type supPram struct {
 	OtdrOtherInfo  string
 }
 
+//General Params extracted from the sor file
 type genParams struct {
 	CableId        string
 	FiberId        string
@@ -50,6 +54,7 @@ type genParams struct {
 	OtdrWavelength string
 }
 
+//Event information extracted from the sor file
 type otdrEvent struct {
 	EventType               string
 	EventPoint_m            float64
@@ -64,6 +69,7 @@ type otdrEvent struct {
 	PeakpointInCurrentEvent int64
 }
 
+//Fixed Params extracted from the sor file
 type fixInfos struct {
 	DateTime              time.Time
 	Unit                  string
@@ -81,7 +87,8 @@ type fixInfos struct {
 	Range_km              float64
 }
 
-//This function get's the sor file path, opens it and retuns a byte array from the file to the main function
+//This function get's the sor file path, opens it and retuns hex string (hexData)
+// and a text string (charString) from the file to the main function
 func readSorFile(filename string) (string, string) {
 
 	var fileInArray []byte
@@ -106,6 +113,8 @@ func readSorFile(filename string) (string, string) {
 	}
 
 	hexData = hex.EncodeToString(fileInArray)
+
+	//Converting the HexData to a text string
 	chars, err := hex.DecodeString(hexData)
 
 	if err != nil {
