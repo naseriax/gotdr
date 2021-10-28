@@ -1,3 +1,5 @@
+//OTDR Reader. Detailed comments will be added later!
+
 package main
 
 import (
@@ -348,7 +350,6 @@ func main() {
 	}
 	jsonExport(otdrExtractedData)
 	// plotter(otdrExtractedData)
-
 }
 
 // datapoints := dataPts(hexData, charString, fixed.sampleQty, fixed.resolution_m)
