@@ -7,3 +7,5 @@
 - Usage:
 
 "go run gotdr.go"
+
+#otdr, #sor
