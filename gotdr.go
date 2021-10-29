@@ -105,9 +105,11 @@ func errDealer(err error) {
 	}
 }
 
-/*This function opens the sor file and returns a hex string (hexData)
-and a text string (charString) from the file to the main function.
-Basically reading the whole file and putting it in RAM */
+/*
+	This function opens the sor file and returns a hex string (hexData)
+	and a text string (charString) from the file to the main function.
+	Basically reading the whole file and putting it in RAM
+*/
 func readSorFile(filename string) (string, string) {
 
 	var fileInArray []byte
@@ -125,7 +127,6 @@ func readSorFile(filename string) (string, string) {
 		if err == io.EOF {
 			break
 		}
-
 		errDealer(err)
 
 		fileInArray = append(fileInArray, eachByte...)
@@ -166,7 +167,6 @@ func fixedParams(hexData, charString string) fixInfos {
 	errDealer(err)
 
 	ior := hexParser(fixInfo[56:64])
-
 	refractionIndex := float32(ior) * float32(math.Pow(10, -5))
 	fiberLightSpeed_km_ms := lightSpeed / refractionIndex
 	resolution_m := float32(hexParser(fixInfo[40:48])) * float32(math.Pow(10, -8)) * fiberLightSpeed_km_ms
@@ -188,7 +188,6 @@ func fixedParams(hexData, charString string) fixInfos {
 		AveragingTime_M:       float32(hexParser(fixInfo[76:80])) / 600,
 		Range_km:              float32(sampleQty) * resolution_m,
 	}
-
 	return fixParam
 }
 
@@ -205,7 +204,6 @@ func supParams(charString string) supPram {
 		OtdrSwVersion:  strings.TrimSpace(slicedparams[5]),
 		OtdrOtherInfo:  strings.TrimSpace(slicedparams[6]),
 	}
-
 	return supInfo
 }
 
@@ -254,9 +252,8 @@ func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float32,
 
 	for e := range eventhex {
 		eventType, err := hex.DecodeString(eventhex[e][28:44])
-		if err != nil {
-			fmt.Println(err)
-		}
+		errDealer(err)
+
 		eventPoint_m := float32(hexParser(eventhex[e][4:12])) * float32(math.Pow(10, -4)) * fiberLightSpeed_km_ms
 		stValue := float32(math.Mod(float64(eventPoint_m), float64(resolution_m)))
 		if stValue >= (resolution_m / 2.0) {
@@ -291,7 +288,6 @@ func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float32,
 			break
 		}
 	}
-
 	return keyevents
 }
 
