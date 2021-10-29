@@ -1,5 +1,14 @@
-//OTDR Reader. Detailed comments will be added later!
+/*
+Author: Naseredin Aramnejad naseredin.aramnejad@gmail.com
+This script is designed to extract all the possible information from the
+given sor file.
+each sor file (Provided by OTDR Equipment) contains multiple data blocks
+and since it's a binary file, it should be red byte per byte.
 
+The formulas and the blueprint of this script are inspired by the information provided by:
+Sidney Li
+http://morethanfootnotes.blogspot.com/2015/07/the-otdr-optical-time-domain.html
+*/
 package main
 
 import (
@@ -15,117 +24,124 @@ import (
 	"time"
 )
 
-//Speed of light in vaccuum.
+/*
+Speed of light in vaccuum. It's used to calculate lightspeed in the
+fiber medium , Fiber length and scan resolution.
+*/
 const lightSpeed = 299.79181901
 
 //This is the struct wrapping all the extracted information and being exported as JSON
 type otdrData struct {
 	Supplier        supPram
-	GenInfo         genParams
+	GenInfo         genParams `json:"General Information"`
 	Events          []otdrEvent
-	FixInfo         fixInfos
-	FiberLength_m   float64
-	BellCoreVersion float32
-	TotalLoss_dB    string
+	FixInfo         fixInfos `json:"Fixed Parameters"`
+	FiberLength_m   float32  `json:"Fiber Length(m)"`
+	BellCoreVersion float32  `json:"Bellcore Version"`
+	TotalLoss_dB    float32  `json:"Total Fiber Loss(dB)"`
 }
 
 //Supplier Params extracted from the sor file
 type supPram struct {
-	OtdrSupplier   string
-	OtdrName       string
-	OtdrSN         string
-	OtdrModuleName string
-	OtdrModuleSN   string
-	OtdrSwVersion  string
-	OtdrOtherInfo  string
+	OtdrSupplier   string `json:"OTDR Supplier"`
+	OtdrName       string `json:"OTDR Name"`
+	OtdrSN         string `json:"OTDR SN"`
+	OtdrModuleName string `json:"OTDR Module Name"`
+	OtdrModuleSN   string `json:"OTDR Module SN"`
+	OtdrSwVersion  string `json:"OTDR SW Version"`
+	OtdrOtherInfo  string `json:"OTDR Other Info"`
 }
 
 //General Params extracted from the sor file
 type genParams struct {
-	CableId        string
-	FiberId        string
+	CableId        string `json:"Cable Id"`
+	FiberId        string `json:"Fiber Id"`
 	LocationA      string
 	LocationB      string
-	BuildCondition string
+	BuildCondition string `json:"Build Condition"`
 	Comment        string
-	CableCode      string
+	CableCode      string `json:"Cable Code"`
 	Operator       string
-	FiberType      string
-	OtdrWavelength string
+	FiberType      string `json:"Fiber Type"`
+	OtdrWavelength string `json:"OTDR Wavelength"`
 }
 
 //Event information extracted from the sor file
 type otdrEvent struct {
-	EventType               string
-	EventPoint_m            float64
-	EventNumber             int
-	Slope                   float64
-	SpliceLoss_dB           float64
-	ReflectionLoss_dB       float64
-	EndOfPreviousEvent      int64
-	BegOfCurrentEvent       int64
-	EndOfCurrentEvent       int64
-	BegOfNextEvent          int64
-	PeakpointInCurrentEvent int64
+	EventType               string  `json:"Event Type"`
+	EventPoint_m            float32 `json:"Event Point(m)"`
+	EventNumber             int     `json:"Event Number"`
+	Slope                   float32 `json:"Slope(dB)"`
+	SpliceLoss_dB           float32 `json:"Splice Loss(dB)"`
+	ReflectionLoss_dB       float32 `json:"Reflection Loss(dB)"`
+	EndOfPreviousEvent      int64   `json:"Previous Event-End"`
+	BegOfCurrentEvent       int64   `json:"Current Event-Start"`
+	EndOfCurrentEvent       int64   `json:"Current Event-End"`
+	BegOfNextEvent          int64   `json:"Next Event-Start"`
+	PeakpointInCurrentEvent int64   `json:"Peak point"`
 }
 
 //Fixed Params extracted from the sor file
 type fixInfos struct {
 	DateTime              time.Time
 	Unit                  string
-	ActualWavelength_nm   float64
-	PulseWidthNo          int64
-	PulseWidth_ns         int64
-	SampleQty             int64
+	ActualWavelength_nm   float32 `json:"Actual Wavelength"`
+	PulseWidthNo          int64   `json:"Pulse Width No"`
+	PulseWidth_ns         int64   `json:"Pulse Width(ns)"`
+	SampleQty             int64   `json:"Sample Quantity"`
 	Ior                   int64
-	RefractionIndex       float64
-	FiberLightSpeed_km_ms float64
-	Resolution_m          float64
-	BackscatteringCo_dB   float32
+	RefractionIndex       float32 `json:"Refraction Index"`
+	FiberLightSpeed_km_ms float32 `json:"Fiber Light Speed"`
+	Resolution_m          float32 `json:"RScan Resolution"`
+	BackscatteringCo_dB   float32 `json:"Back-Scattering"`
 	Averaging             int64
-	AveragingTime_M       float32
-	Range_km              float64
+	AveragingTime_M       float32 `json:"Averaging Time"`
+	Range_km              float32 `json:"Scan Range"`
 }
 
-//This function get's the sor file path, opens it and retuns hex string (hexData)
-// and a text string (charString) from the file to the main function
+func errDealer(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+/*This function opens the sor file and returns a hex string (hexData)
+and a text string (charString) from the file to the main function.
+Basically reading the whole file and putting it in RAM */
 func readSorFile(filename string) (string, string) {
 
 	var fileInArray []byte
 	var hexData string
 
-	f, e := os.Open(filename)
-	if e != nil {
-		panic(e)
-	}
+	f, err := os.Open(filename)
+	errDealer(err)
+
 	defer f.Close()
 
 	for {
-		b := make([]byte, 1)
-		_, e = f.Read(b)
+		eachByte := make([]byte, 1)
+		_, err = f.Read(eachByte)
 
-		if e == io.EOF {
+		if err == io.EOF {
 			break
-		} else if e != nil {
-			panic(e)
 		}
-		fileInArray = append(fileInArray, b...)
-	}
 
+		errDealer(err)
+
+		fileInArray = append(fileInArray, eachByte...)
+	}
+	//Converting the byte array into a hex String
 	hexData = hex.EncodeToString(fileInArray)
 
 	//Converting the HexData to a text string
 	chars, err := hex.DecodeString(hexData)
-
-	if err != nil {
-		panic(err)
-	}
+	errDealer(err)
 
 	charString := string(chars)
 	return hexData, charString
 }
 
-func Reverse(s string) string {
+func reverse(s string) string {
 	str := ""
 	for ind := 0; ind < len(s); ind += 2 {
 		str = s[ind:ind+2] + str
@@ -134,7 +150,7 @@ func Reverse(s string) string {
 }
 
 func hexParser(hexData string) int64 {
-	output, err := strconv.ParseInt(Reverse(hexData), 16, 64)
+	output, err := strconv.ParseInt(reverse(hexData), 16, 64)
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -145,20 +161,21 @@ func hexParser(hexData string) int64 {
 func fixedParams(hexData, charString string) fixInfos {
 
 	fixInfo := hexData[(strings.Index(charString[224:], "FxdParams")+234)*2 : (strings.Index(charString[224:], "DataPts")+224)*2]
+
 	unit, err := hex.DecodeString(fixInfo[8:12])
-	if err != nil {
-		fmt.Println(err)
-	}
+	errDealer(err)
+
 	ior := hexParser(fixInfo[56:64])
-	refractionIndex := float64(ior) * math.Pow(10, -5)
+
+	refractionIndex := float32(ior) * float32(math.Pow(10, -5))
 	fiberLightSpeed_km_ms := lightSpeed / refractionIndex
-	resolution_m := float64(hexParser(fixInfo[40:48])) * math.Pow(10, -8) * fiberLightSpeed_km_ms
+	resolution_m := float32(hexParser(fixInfo[40:48])) * float32(math.Pow(10, -8)) * fiberLightSpeed_km_ms
 	sampleQty := hexParser(fixInfo[48:56])
 
 	fixParam := fixInfos{
 		DateTime:              time.Unix(hexParser(fixInfo[:8]), 0),
 		Unit:                  string(unit),
-		ActualWavelength_nm:   float64(hexParser(fixInfo[12:16])) / 10.0,
+		ActualWavelength_nm:   float32(hexParser(fixInfo[12:16])) / 10.0,
 		PulseWidthNo:          hexParser(fixInfo[32:36]),
 		PulseWidth_ns:         hexParser(fixInfo[36:40]),
 		SampleQty:             sampleQty,
@@ -169,7 +186,7 @@ func fixedParams(hexData, charString string) fixInfos {
 		BackscatteringCo_dB:   float32(hexParser(fixInfo[64:68])) * -0.1,
 		Averaging:             hexParser(fixInfo[68:76]),
 		AveragingTime_M:       float32(hexParser(fixInfo[76:80])) / 600,
-		Range_km:              float64(sampleQty) * resolution_m,
+		Range_km:              float32(sampleQty) * resolution_m,
 	}
 
 	return fixParam
@@ -212,31 +229,21 @@ func genParam(charString string) genParams {
 	return genInfo
 }
 
-func fiberLength(hexData, charString string, fixParams fixInfos) float64 {
-	length := float64(hexParser(hexData[(strings.Index(charString[224:], "WaveMTSParams")+210)*2 : (strings.Index(charString[224:], "WaveMTSParams")+214)*2]))
-	return length * math.Pow(10, -4) * lightSpeed / fixParams.RefractionIndex
+func fiberLength(hexData, charString string, fixParams fixInfos) float32 {
+	length := float32(hexParser(hexData[(strings.Index(charString[224:], "WaveMTSParams")+210)*2 : (strings.Index(charString[224:], "WaveMTSParams")+214)*2]))
+	return length * float32(math.Pow(10, -4)) * lightSpeed / fixParams.RefractionIndex
 }
 
 func bellCoreVersion(hexData, charString string) float32 {
 	return float32(hexParser(hexData[(strings.Index(charString, "Map")+4)*2:(strings.Index(charString, "Map")+5)*2])) / 100.0
 }
 
-func totalLoss(hexData, charString string) string {
+func totalLoss(hexData, charString string) float32 {
 	totallossinfo := hexData[(strings.Index(charString[224:], "WaveMTSParams")+202)*2 : (strings.Index(charString[224:], "WaveMTSParams")+206)*2]
-	return fmt.Sprintf("%f", float64(hexParser(totallossinfo))*0.001)
+	return float32(hexParser(totallossinfo)) * 0.001
 }
 
-func dataPts(hexData string, charString string, sampleQty int64, resolution_m float64) map[float64]float64 {
-	data := hexData[(strings.Index(charString[224:], "DataPts")+224)*2 : (strings.Index(charString[224:], "KeyEvents")+224)*2][40:]
-	dataset := make(map[float64]float64)
-	for length := 0; length < int(sampleQty); length++ {
-		passedlen := float64(length) * resolution_m
-		dataset[passedlen] = float64(hexParser(data[length*4:length*4+4])) * -1000.0 * math.Pow(10, -6)
-	}
-	return dataset
-}
-
-func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float64, resolution_m float64) []otdrEvent {
+func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float32, resolution_m float32) []otdrEvent {
 	var keyevents []otdrEvent
 	events := hexData[(strings.Index(charString[224:], "KeyEvents")+224)*2 : (strings.Index(charString[224:], "WaveMTSParams")+224)*2]
 	evnumbers := hexParser(events[20:24])
@@ -250,26 +257,26 @@ func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float64,
 		if err != nil {
 			fmt.Println(err)
 		}
-		eventPoint_m := float64(hexParser(eventhex[e][4:12])) * math.Pow(10, -4) * fiberLightSpeed_km_ms
-		stValue := math.Mod(eventPoint_m, resolution_m)
+		eventPoint_m := float32(hexParser(eventhex[e][4:12])) * float32(math.Pow(10, -4)) * fiberLightSpeed_km_ms
+		stValue := float32(math.Mod(float64(eventPoint_m), float64(resolution_m)))
 		if stValue >= (resolution_m / 2.0) {
 			eventPoint_m = eventPoint_m + resolution_m - stValue
 		} else {
 			eventPoint_m = eventPoint_m - stValue
 		}
 
-		var reflectionLoss_dB float64
+		var reflectionLoss_dB float32
 		if hexParser(eventhex[e][20:28]) > 0 {
-			reflectionLoss_dB = (float64(hexParser(eventhex[e][20:28])) - math.Pow(2, 32)) * 0.001
+			reflectionLoss_dB = float32((float64(hexParser(eventhex[e][20:28])) - math.Pow(2, 32)) * 0.001)
 		} else {
-			reflectionLoss_dB = float64(hexParser(eventhex[e][20:28]))
+			reflectionLoss_dB = float32(hexParser(eventhex[e][20:28]))
 		}
 
 		eventEntry := otdrEvent{
 			EventNumber:             int(hexParser(eventhex[e][:4])),
 			EventPoint_m:            eventPoint_m,
-			Slope:                   float64(hexParser(eventhex[e][12:16])) * 0.001,
-			SpliceLoss_dB:           float64(hexParser(eventhex[e][16:20])) * 0.001,
+			Slope:                   float32(hexParser(eventhex[e][12:16])) * 0.001,
+			SpliceLoss_dB:           float32(hexParser(eventhex[e][16:20])) * 0.001,
 			ReflectionLoss_dB:       reflectionLoss_dB,
 			EventType:               string(eventType),
 			EndOfPreviousEvent:      hexParser(eventhex[e][44:52]),
@@ -290,51 +297,10 @@ func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float64,
 
 func jsonExport(data otdrData) {
 	b, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(string(b))
+	errDealer(err)
 	_ = ioutil.WriteFile("otdr_Output.json", b, 0644)
-	fmt.Println("Json file has been exported!")
+	fmt.Println("Json file has been exported! - json file name: otdr_Output.json")
 }
-
-// func plotter(data otdrData) {
-
-// 	// c = plt.subplots(figsize=(13,8))[1]
-// 	// c.plot(self.dataset.keys(),self.dataset.values(),color='tab:green',lw=0.6)
-
-// 	for ev := range data.Events {
-// 		refQ := ""
-// 		lossQ := ""
-// 		tmp1 := data.Events[ev][EventPoint_m]
-// 		tmp2 := data.Events[ev]
-
-// 		if float64(tmp2[ReflectionLoss_dB]) == 0 {
-// 			eventType := "Splice"
-// 			refQ = " - OK"
-// 		} else {
-// 			eventType = "Connector"
-// 			if float64(tmp2[ReflectionLoss_dB]) <= -40 {
-// 				refQ = " - OK"
-// 			} else {
-// 				refQ = " - !!!"
-// 			}
-// 		}
-// 		if float64(tmp2[SpliceLoss_dB]) == 0 {
-// 			lossQ = " - Ghost!"
-// 		} else if float64(tmp2[SpliceLoss_dB]) <= 1 {
-// 			lossQ = " - OK"
-// 		} else {
-// 			lossQ = " - !!!"
-// 		}
-// 		//c.annotate("",xy=(tmp1,self.dataset[tmp1] + 1),xytext=(tmp1,self.dataset[tmp1] - 1),arrowprops=dict(arrowstyle="<->",color="red",connectionstyle= "bar,fraction=0"))
-// 		//c.annotate(f"  Event:{ev}\n  Type:  {eventType}\n  Len:   {round(tmp1,1)}m\n  Ref:   {tmp2['reflectionLoss_dB']}dB{refQ}\n  Loss:  {tmp2['spliceLoss_dB']}dB{lossQ}",xy=(tmp1,self.dataset[tmp1]),xytext=(tmp1,self.dataset[tmp1]-1))
-// 	}
-// 	// c.set(xlabel='Fiber Length (m)', ylabel='Optical Power(dB)',title='OTDR Graph')
-// 	// plt.grid()
-// 	// plt.show()
-// }
 
 func main() {
 
@@ -343,23 +309,34 @@ func main() {
 	fmt.Print("Enter the .sor filename: ")
 	fmt.Scanln(&sorFileName)
 
-	//Invoking the filereader function, the result will be []byte
+	/*
+		Invoking the filereader function, the result will be
+		a hex version of the sor file (hexData)and a text encoded
+		version of the sor file (charString)hexData will be
+		used to extract the numeric values while charString is used
+		to find the related sections and also for text data extraction.
+	*/
 	hexData, charString := readSorFile(sorFileName)
 
-	//Extracting the information by invoking the corresponding function
+	//###### Extracting the information by invoking the corresponding function #####
+
+	/*
+		This function call will extract the information in the
+		fixParam part of the sor file and store them in the type fixInfos struct
+		Since we need some of the fixedParams to calculate other params,It's
+		called separately unlike other extractions.
+	*/
 	fixed := fixedParams(hexData, charString)
+
+	// otdrData is the main struct which contains and gather all the extracted information to be converted into JSON format
 	otdrExtractedData := otdrData{
-		FixInfo:         fixed,
-		Supplier:        supParams(charString),
-		GenInfo:         genParam(charString),
-		Events:          keyEvents(hexData, charString, fixed.FiberLightSpeed_km_ms, fixed.Resolution_m),
-		TotalLoss_dB:    totalLoss(hexData, charString),
-		FiberLength_m:   fiberLength(hexData, charString, fixed),
-		BellCoreVersion: bellCoreVersion(hexData, charString),
+		FixInfo:         fixed,                                                                           //Fixed params that are extracted above.
+		Supplier:        supParams(charString),                                                           //OTDR Module Supplier Information
+		GenInfo:         genParam(charString),                                                            //OTDR scan General Information
+		Events:          keyEvents(hexData, charString, fixed.FiberLightSpeed_km_ms, fixed.Resolution_m), //OTDR scan key events like loss events and reflection events
+		TotalLoss_dB:    totalLoss(hexData, charString),                                                  //Total fiber loss value of the scan, end to end in dB
+		FiberLength_m:   fiberLength(hexData, charString, fixed),                                         //Total fiber length, end to end
+		BellCoreVersion: bellCoreVersion(hexData, charString),                                            //Bellcore version of the file, 2.1 is supported by this script
 	}
 	jsonExport(otdrExtractedData)
-	// plotter(otdrExtractedData)
 }
-
-// datapoints := dataPts(hexData, charString, fixed.sampleQty, fixed.resolution_m)
-// fmt.Println(datapoints)
