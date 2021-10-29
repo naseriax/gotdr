@@ -2,10 +2,7 @@
 - It's far from efficient or clean.
 - The graph generation feature will be added in the near future.
 
-
-
 - Usage:
-
-"go run gotdr.go"
-
-#otdr, #sor
+```
+#go run gotdr.go
+```
