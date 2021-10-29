@@ -28,7 +28,7 @@ import (
 Speed of light in vaccuum. It's used to calculate lightspeed in the
 fiber medium , Fiber length and scan resolution.
 */
-const lightSpeed = 299.79181901
+const lightSpeed = 299.79181901 // m/µsec
 
 //This is the struct wrapping all the extracted information and being exported as JSON
 type otdrData struct {
@@ -36,9 +36,10 @@ type otdrData struct {
 	GenInfo         genParams `json:"General Information"`
 	Events          []otdrEvent
 	FixInfo         fixInfos `json:"Fixed Parameters"`
-	FiberLength_m   float32  `json:"Fiber Length(m)"`
+	FiberLength_km  float32  `json:"Fiber Length(km)"`
 	BellCoreVersion float32  `json:"Bellcore Version"`
 	TotalLoss_dB    float32  `json:"Total Fiber Loss(dB)"`
+	AvgLossPerKm    float32  `json:"Average Loss per Km(dB)"`
 }
 
 //Supplier Params extracted from the sor file
@@ -74,11 +75,11 @@ type otdrEvent struct {
 	Slope                   float32 `json:"Slope(dB)"`
 	SpliceLoss_dB           float32 `json:"Splice Loss(dB)"`
 	ReflectionLoss_dB       float32 `json:"Reflection Loss(dB)"`
-	EndOfPreviousEvent      int64   `json:"Previous Event-End"`
-	BegOfCurrentEvent       int64   `json:"Current Event-Start"`
-	EndOfCurrentEvent       int64   `json:"Current Event-End"`
-	BegOfNextEvent          int64   `json:"Next Event-Start"`
-	PeakpointInCurrentEvent int64   `json:"Peak point"`
+	EndOfPreviousEvent      int     `json:"Previous Event-End"`
+	BegOfCurrentEvent       int     `json:"Current Event-Start"`
+	EndOfCurrentEvent       int     `json:"Current Event-End"`
+	BegOfNextEvent          int     `json:"Next Event-Start"`
+	PeakpointInCurrentEvent int     `json:"Peak point"`
 }
 
 //Fixed Params extracted from the sor file
@@ -229,7 +230,7 @@ func genParam(charString string) genParams {
 
 func fiberLength(hexData, charString string, fixParams fixInfos) float32 {
 	length := float32(hexParser(hexData[(strings.Index(charString[224:], "WaveMTSParams")+210)*2 : (strings.Index(charString[224:], "WaveMTSParams")+214)*2]))
-	return length * float32(math.Pow(10, -4)) * lightSpeed / fixParams.RefractionIndex
+	return (length * float32(math.Pow(10, -4)) * lightSpeed / fixParams.RefractionIndex) / 1000
 }
 
 func bellCoreVersion(hexData, charString string) float32 {
@@ -276,11 +277,11 @@ func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float32,
 			SpliceLoss_dB:           float32(hexParser(eventhex[e][16:20])) * 0.001,
 			ReflectionLoss_dB:       reflectionLoss_dB,
 			EventType:               string(eventType),
-			EndOfPreviousEvent:      hexParser(eventhex[e][44:52]),
-			BegOfCurrentEvent:       hexParser(eventhex[e][52:60]),
-			EndOfCurrentEvent:       hexParser(eventhex[e][60:68]),
-			BegOfNextEvent:          hexParser(eventhex[e][68:76]),
-			PeakpointInCurrentEvent: hexParser(eventhex[e][76:84]),
+			EndOfPreviousEvent:      int(hexParser(eventhex[e][44:52])),
+			BegOfCurrentEvent:       int(hexParser(eventhex[e][52:60])),
+			EndOfCurrentEvent:       int(hexParser(eventhex[e][60:68])),
+			BegOfNextEvent:          int(hexParser(eventhex[e][68:76])),
+			PeakpointInCurrentEvent: int(hexParser(eventhex[e][76:84])),
 		}
 
 		keyevents = append(keyevents, eventEntry)
@@ -324,15 +325,20 @@ func main() {
 	*/
 	fixed := fixedParams(hexData, charString)
 
+	loss := totalLoss(hexData, charString)
+	length := fiberLength(hexData, charString, fixed)
+
 	// otdrData is the main struct which contains and gather all the extracted information to be converted into JSON format
 	otdrExtractedData := otdrData{
 		FixInfo:         fixed,                                                                           //Fixed params that are extracted above.
 		Supplier:        supParams(charString),                                                           //OTDR Module Supplier Information
 		GenInfo:         genParam(charString),                                                            //OTDR scan General Information
 		Events:          keyEvents(hexData, charString, fixed.FiberLightSpeed_km_ms, fixed.Resolution_m), //OTDR scan key events like loss events and reflection events
-		TotalLoss_dB:    totalLoss(hexData, charString),                                                  //Total fiber loss value of the scan, end to end in dB
-		FiberLength_m:   fiberLength(hexData, charString, fixed),                                         //Total fiber length, end to end
+		TotalLoss_dB:    loss,                                                                            //Total fiber loss value of the scan, end to end in dB
+		FiberLength_km:  length,                                                                          //Total fiber length, end to end
 		BellCoreVersion: bellCoreVersion(hexData, charString),                                            //Bellcore version of the file, 2.1 is supported by this script
+		AvgLossPerKm:    loss / length,
 	}
+
 	jsonExport(otdrExtractedData)
 }
