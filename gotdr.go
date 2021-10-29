@@ -3,9 +3,9 @@ Author: Naseredin Aramnejad naseredin.aramnejad@gmail.com
 This script is designed to extract all the possible information from the
 given sor file.
 each sor file (Provided by OTDR Equipment) contains multiple data blocks
-and since it's a binary file, it should be red byte per byte.
+and since it's a binary file, it should be red per byte.
 
-The formulas and the blueprint of this script are inspired by the information provided by:
+Formulas and blueprint of this script are inspired by the information provided by:
 Sidney Li
 http://morethanfootnotes.blogspot.com/2015/07/the-otdr-optical-time-domain.html
 */
