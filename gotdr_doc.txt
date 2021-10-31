@@ -1,54 +1,79 @@
 package main // import "naseredin.aramnejad"
 
+Author: Naseredin Aramnejad naseredin.aramnejad@gmail.com This script is
+designed to extract all the possible information from the given sor file.
+each sor file (Provided by OTDR Equipment) contains multiple data blocks and
+since it's a binary file, it should be red per byte.
+
+Formulas and blueprint of this script are inspired by the information
+provided by: Sidney Li
+http://morethanfootnotes.blogspot.com/2015/07/the-OTDR-optical-time-domain.html
 
 CONSTANTS
 
-const lightSpeed = 299.79181901
-    Speed of light in vaccuum. It's used to calculate lightspeed in the fiber
-    medium , Fiber length and scan resolution.
+const lightSpeed = 299.79181901 // m/µsec
+    lightSpeed is the speed of light in a vaccuum to be used for refractive
+    index and fiber length calculation.
 
 
 FUNCTIONS
 
-func bellCoreVersion(hexData, charString string) float32
-func errDealer(err error)
-func fiberLength(hexData, charString string, fixParams fixInfos) float32
-func hexParser(hexData string) int64
-func jsonExport(data otdrData)
-func main()
-func readSorFile(filename string) (string, string)
-    This function opens the sor file and returns a hex string (hexData) and a
-    text string (charString) from the file to the main function. Basically
-    reading the whole file and putting it in RAM
+func BellCoreVersion(hexData, charString string) float32
+    BellCoreVersion reads the bellcore version from the sor file and returns it.
 
-func reverse(s string) string
-func totalLoss(hexData, charString string) float32
+func FiberLength(hexData, charString string, fixParams FixInfo) float32
+    FiberLength calculates the fiber length and returns it.
+
+func HexParser(hexData string) int64
+    HexParser calls the Reverse() funcition to reverse the order of the provided
+    HexString and then converts it's value to int64.
+
+func JSONExport(data OTDRData)
+func ReadSorFile(filename string) (string, string)
+    ReadSorFile function opens the sor file and returns a hex string (hexData)
+    and a text string (charString) from the file to the main function, Basically
+    reading the whole file and putting it in RAM.
+
+func Reverse(s string) string
+    Reverse will reverse the hex string in every 2 bytes. Example: 0ABCD123 =>
+    23D1BC0A.
+
+func TotalLoss(hexData, charString string) float32
+    TotalLoss reads the total loss of the fiber from the sor file and returns
+    it.
+
+func errDealer(err error)
+    errDealer will handle the errors.
+
+func main()
 
 TYPES
 
-type fixInfos struct {
-	DateTime              time.Time `json:"Scan Date&Time"`
-	Unit                  string
-	ActualWavelength_nm   float32 `json:"Actual Wavelength"`
-	PulseWidthNo          int64   `json:"Pulse Width No"`
-	PulseWidth_ns         int64   `json:"Pulse Width(ns)"`
-	SampleQty             int64   `json:"Sample Quantity"`
-	Ior                   int64
-	RefractionIndex       float32 `json:"Refraction Index"`
-	FiberLightSpeed_km_ms float32 `json:"Fiber Light Speed"`
-	Resolution_m          float32 `json:"RScan Resolution"`
-	BackscatteringCo_dB   float32 `json:"Back-Scattering"`
-	Averaging             int64
-	AveragingTime_M       float32 `json:"Averaging Time"`
-	Range_km              float32 `json:"Scan Range"`
+type FixInfo struct {
+	DateTime       time.Time
+	Unit           string
+	ActualWL       float32 `json:"Actual Wavelength"`
+	PulseWidthNo   int64   `json:"Pulse Width No"`
+	PulseWidth     int64   `json:"Pulse Width(ns)"`
+	SampleQTY      int64   `json:"Sample Quantity"`
+	IOR            int64
+	RefIndex       float32 `json:"Refraction Index"`
+	FiberSpeed     float32 `json:"Fiber Light Speed"`
+	Resolution     float32 `json:"Scan Resolution"`
+	Backscattering float32 `json:"Back-Scattering"`
+	Averaging      int64
+	AveragingTime  float32 `json:"Averaging Time"`
+	Range          float32 `json:"Scan Range"`
 }
-    Fixed Params extracted from the sor file
+    FixInfos struct is the Fixed parameters extracted from the sor file.
 
-func fixedParams(hexData, charString string) fixInfos
+func FixedParams(hexData, charString string) FixInfo
+    FixedParams function extracts the Fixed Parameters from the sor file and
+    stores it in FixInfos struct.
 
-type genParams struct {
-	CableId        string `json:"Cable Id"`
-	FiberId        string `json:"Fiber Id"`
+type GenParam struct {
+	CableID        string `json:"Cable Id"`
+	FiberID        string `json:"Fiber Id"`
 	LocationA      string
 	LocationB      string
 	BuildCondition string `json:"Build Condition"`
@@ -56,51 +81,58 @@ type genParams struct {
 	CableCode      string `json:"Cable Code"`
 	Operator       string
 	FiberType      string `json:"Fiber Type"`
-	OtdrWavelength string `json:"OTDR Wavelength"`
+	OTDRWavelength string `json:"OTDR Wavelength"`
 }
-    General Params extracted from the sor file
+    GenParams is the General Parameters extracted from the sor file.
 
-func genParam(charString string) genParams
+func GenParams(charString string) GenParam
+    GenParams function extracts the General Parameters from the sor file and
+    stores it in GenParam struct.
 
-type otdrData struct {
-	Supplier        supPram
-	GenInfo         genParams `json:"General Information"`
-	Events          []otdrEvent
-	FixInfo         fixInfos `json:"Fixed Parameters"`
-	FiberLength_m   float32  `json:"Fiber Length(m)"`
-	BellCoreVersion float32  `json:"Bellcore Version"`
-	TotalLoss_dB    float32  `json:"Total Fiber Loss(dB)"`
+type OTDRData struct {
+	Supplier        SupParam
+	GenInfo         GenParam `json:"General Information"`
+	Events          []OTDREvent
+	FixInfo         FixInfo `json:"Fixed Parameters"`
+	FiberLength     float32 `json:"Fiber Length(km)"`
+	BellCoreVersion float32 `json:"Bellcore Version"`
+	TotalLoss       float32 `json:"Total Fiber Loss(dB)"`
+	AvgLoss         float32 `json:"Average Loss per Km(dB)"`
 }
-    This is the struct wrapping all the extracted information and being exported
-    as JSON
+    OTDRData is the struct wrapping all the extracted information and will be
+    exported as JSON.
 
-type otdrEvent struct {
-	EventType               string  `json:"Event Type"`
-	EventPoint_m            float32 `json:"Event Point(m)"`
-	EventNumber             int     `json:"Event Number"`
-	Slope                   float32 `json:"Slope(dB)"`
-	SpliceLoss_dB           float32 `json:"Splice Loss(dB)"`
-	ReflectionLoss_dB       float32 `json:"Reflection Loss(dB)"`
-	EndOfPreviousEvent      int64   `json:"Previous Event-End"`
-	BegOfCurrentEvent       int64   `json:"Current Event-Start"`
-	EndOfCurrentEvent       int64   `json:"Current Event-End"`
-	BegOfNextEvent          int64   `json:"Next Event-Start"`
-	PeakpointInCurrentEvent int64   `json:"Peak point"`
+type OTDREvent struct {
+	EventType          string  `json:"Event Type"`
+	EventLocM          float32 `json:"Event Point(m)"`
+	EventNumber        int     `json:"Event Number"`
+	Slope              float32 `json:"Slope(dB)"`
+	SpliceLoss         float32 `json:"Splice Loss(dB)"`
+	RefLoss            float32 `json:"Reflection Loss(dB)"`
+	EndOfPreviousEvent int     `json:"Previous Event-End"`
+	BegOfCurrentEvent  int     `json:"Current Event-Start"`
+	EndOfCurrentEvent  int     `json:"Current Event-End"`
+	BegOfNextEvent     int     `json:"Next Event-Start"`
+	PeakCurrentEvent   int     `json:"Peak point"`
 }
-    Event information extracted from the sor file
+    OTDREvent is the event information extracted from the sor file.
 
-func keyEvents(hexData string, charString string, fiberLightSpeed_km_ms float32, resolution_m float32) []otdrEvent
+func KeyEvents(hexData string, charString string, fiberSpeed float32, resolution float32) []OTDREvent
+    KeyEvents function extracts the events information from the sor file and
+    stores it in OTDREvent struct.
 
-type supPram struct {
-	OtdrSupplier   string `json:"OTDR Supplier"`
-	OtdrName       string `json:"OTDR Name"`
-	OtdrSN         string `json:"OTDR SN"`
-	OtdrModuleName string `json:"OTDR Module Name"`
-	OtdrModuleSN   string `json:"OTDR Module SN"`
-	OtdrSwVersion  string `json:"OTDR SW Version"`
-	OtdrOtherInfo  string `json:"OTDR Other Info"`
+type SupParam struct {
+	OTDRSupplier   string `json:"OTDR Supplier"`
+	OTDRName       string `json:"OTDR Name"`
+	OTDRsn         string `json:"OTDR SN"`
+	OTDRModuleName string `json:"OTDR Module Name"`
+	OTDRModuleSN   string `json:"OTDR Module SN"`
+	OTDRswVersion  string `json:"OTDR SW Version"`
+	OTDROtherInfo  string `json:"OTDR Other Info"`
 }
-    Supplier Params extracted from the sor file
+    SupParam is the Supplier Parameters extracted from the sor file.
 
-func supParams(charString string) supPram
+func SupParams(charString string) SupParam
+    SupParams function extracts the Supplier Parameters from the sor file and
+    stores it in SupParam struct.
 
