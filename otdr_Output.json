@@ -9,11 +9,12 @@
     "OTDR Other Info": ""
   },
   "General Information": {
-    "Cable Id": "FRCable",
+    "Cable Id": "Cable",
+    "Language": "FR",
     "Fiber Id": "Fiber",
     "LocationA": "Loc A",
     "LocationB": "Loc B",
-    "Build Condition": "CC",
+    "Build Condition": "as-current",
     "Comment": "80 Km scan",
     "Cable Code": "",
     "Operator": "",

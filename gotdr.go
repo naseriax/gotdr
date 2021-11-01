@@ -7,7 +7,7 @@ and since it's a binary file, it should be red per byte.
 
 Formulas and blueprint of this script are inspired by the information provided by:
 Sidney Li
-http://morethanfootnotes.blogspot.com/2015/07/the-OTDR-optical-time-domain.html
+http://morethanfootnotes.blogspot.com/2015/07/
 */
 package main
 
@@ -53,6 +53,7 @@ type SupParam struct {
 //GenParams is the General Parameters extracted from the sor file.
 type GenParam struct {
 	CableID        string `json:"Cable Id"`
+	Lang           string `json:"Language"`
 	FiberID        string `json:"Fiber Id"`
 	LocationA      string
 	LocationB      string
@@ -216,13 +217,20 @@ func GenParams(charString string) GenParam {
 	genString := charString[strings.Index(charString[224:], "GenParams")+234 : strings.Index(charString[224:], "SupParams")+224]
 	slicedParams := strings.Split(genString, "\x00")
 
+	buildConditionTemplate := map[string]string{"BC": "as-built",
+		"CC": "as-current",
+		"RC": "as-repaired",
+		"OT": "other",
+	}
+
 	genInfo := GenParam{
-		CableID:        strings.TrimSpace(slicedParams[0]),
+		CableID:        strings.TrimSpace(slicedParams[0][2:]),
+		Lang:           strings.TrimSpace(slicedParams[0][:2]),
 		FiberID:        strings.TrimSpace(slicedParams[1]),
 		LocationA:      strings.TrimSpace(slicedParams[2][4:]),
 		LocationB:      strings.TrimSpace(slicedParams[3]),
 		CableCode:      strings.TrimSpace(slicedParams[4]),
-		BuildCondition: strings.TrimSpace(slicedParams[5]),
+		BuildCondition: buildConditionTemplate[strings.TrimSpace(slicedParams[5])],
 		Operator:       strings.TrimSpace(slicedParams[13]),
 		Comment:        strings.TrimSpace(slicedParams[14]),
 		FiberType:      "G." + strconv.FormatInt(HexParser(hex.EncodeToString([]byte(slicedParams[2][:2]))), 10),
