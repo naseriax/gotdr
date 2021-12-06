@@ -5,4 +5,6 @@
 - Usage:
 ```
 #go run gotdr.go
+
+File Name: sorfiles/2.sor
 ```
