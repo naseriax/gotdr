@@ -2,9 +2,7 @@
 Author: Naseredin Aramnejad naseredin.aramnejad@gmail.com
 This script is designed to extract all the possible information from the
 given sor file.
-each sor file (Provided by OTDR Equipment) contains multiple data blocks
-and since it's a binary file, it should be red per byte.
-
+each sor file (Provided by OTDR Equipment) contains multiple data blocks.
 Formulas and blueprint of this script are inspired by the information provided by:
 Sidney Li
 http://morethanfootnotes.blogspot.com/2015/07/
@@ -21,21 +19,116 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
-// lightSpeed is the speed of light in a vaccuum to be used for refractive index and fiber length calculation.
 const lightSpeed = 299.79181901 // m/µsec
 
-// errDealer handles the errors.
 func errDealer(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func openBrowser(url string) {
+	var err error
+
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+
+	if err != nil {
+		fmt.Printf("Failed to open browser: %v\n", err)
+	}
+}
+
+func gochart(data [][]float64, events map[int]OTDREvent) {
+
+	// Create a new line chart instance
+	xValues := make([]opts.LineData, len(data))
+	yValues := make([]opts.LineData, len(data))
+
+	for i, point := range data {
+		xValues[i] = opts.LineData{Value: point[0]}
+		yValues[i] = opts.LineData{Value: point[1]}
+	}
+
+	// Create a new line chart instance
+	line := charts.NewLine()
+
+	// Set global options like title and legend
+	line.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title:    "Zoomable Line Chart with Annotations",
+			Subtitle: "This is a zoomable line chart with annotations",
+		}),
+		charts.WithToolboxOpts(opts.Toolbox{
+			// Show: true,
+			Feature: &opts.ToolBoxFeature{
+				DataZoom: &opts.ToolBoxFeatureDataZoom{
+					// Show: true,
+				},
+			},
+		}),
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:       "inside",
+			Start:      0,
+			End:        100,
+			XAxisIndex: []int{0},
+		}),
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:       "slider",
+			Start:      0,
+			End:        100,
+			XAxisIndex: []int{0},
+		}),
+		charts.WithTitleOpts(opts.Title{
+			Title: "markpoint options",
+		}),
+	)
+
+	markPoints := make([]opts.MarkPointNameCoordItem, 0, len(data))
+
+	markPoints = append(markPoints, opts.MarkPointNameCoordItem{
+		Value:      "1",
+		Name:       "Event 10",
+		Coordinate: []interface{}{events[3].EventLocM, -31.703},
+		Symbol:     "arrow",
+	})
+
+	// Add data to the line chart
+	line.SetXAxis(xValues).AddSeries("Category A", yValues,
+		charts.WithMarkPointNameCoordItemOpts(markPoints...))
+	line.SetSeriesOptions(charts.WithMarkPointNameTypeItemOpts(
+		opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
+		opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
+		opts.MarkPointNameTypeItem{Name: "Minimum", Type: "vertical"},
+	),
+		charts.WithMarkPointStyleOpts(
+			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+	)
+
+	f, _ := os.Create("line.html")
+	line.Render(f)
+
+	openBrowser("line.html")
+
 }
 
 func mod(a, b float64) float64 {
@@ -70,11 +163,6 @@ func customPanicHandler() {
 	}
 }
 
-/*
-ReadSorFile function opens the sor file and returns a hex string (hexData)
-and a text string (charString) from the file to the main function,
-Basically reading the whole file and putting it in RAM.
-*/
 func ReadSorFile(filename string) otdrRawData {
 
 	r := otdrRawData{
@@ -238,7 +326,7 @@ func (d *otdrRawData) GetOrder() {
 	d.SecLocs = sectionLocations
 }
 
-// FixedParams function extracts the Fixed Parameters from the sor file and stores it in FixInfos struct.
+// getFixedParams function extracts the Fixed Parameters from the sor file and stores it in FixInfos struct.
 func (d *otdrRawData) getFixedParams() {
 
 	f := FixInfo{}
@@ -307,35 +395,32 @@ func (d *otdrRawData) getFixedParams() {
 	f.Unit = string(unit)
 
 	d.FixedParams = f
-
 }
 
 func (d *otdrRawData) getDataPoints() {
 	dtpoints := d.HexData[d.SecLocs["DataPts"][1]*2 : d.SecLocs[d.GetNext("DataPts")][1]*2][40:]
-	start := 0
-	cumulative_length := 0
+	var start int64 = 0
+	var cumulative_length float64 = 0
 
 	for i := range d.FixedParams.SampleQTY {
 
-		qty := int(d.FixedParams.SampleQTY[i])
-		resolution := int(d.FixedParams.Resolution[i])
+		qty := int64(d.FixedParams.SampleQTY[i])
+		resolution := d.FixedParams.Resolution[i]
 
-		for j := 0; j < qty; j++ {
+		var j int64
+		for j = 0; j < qty; j++ {
 			index := start + j
-			if index < len(dtpoints) {
+			if index < int64(len(dtpoints)) {
 				hex_value := dtpoints[index*4 : index*4+4]
-				db_value := dB(parsHexValue(hex_value))
+				db_value := math.Round(dB(parsHexValue(hex_value))*1000) / 1000
 				passedlen := math.Round(float64(cumulative_length*1000)) / 1000
 				dataPoint := []float64{passedlen, db_value}
-				d.Distance = append(d.Distance, passedlen)
-				d.Power = append(d.Power, db_value)
 				d.DataPoints = append(d.DataPoints, dataPoint)
 				cumulative_length += resolution
 			}
 		}
 		start += qty
 	}
-
 }
 
 // SupParams function extracts the Supplier Parameters from the sor file and stores it in SupParam struct.
@@ -379,7 +464,7 @@ func (d *otdrRawData) getGenParams() {
 	d.GenParams = genInfo
 }
 
-// FiberLength calculates the fiber length and returns it.
+// getFiberLength calculates the fiber length and returns it.
 func (d *otdrRawData) getFiberLength() {
 	for _, v := range d.Events {
 		if strings.Contains(v.EventType, "EXX") || strings.Contains(v.EventType, "E99") {
@@ -388,22 +473,22 @@ func (d *otdrRawData) getFiberLength() {
 	}
 }
 
-// BellCoreVersion reads the bellcore version from the sor file and returns it.
+// getBellCoreVersion reads the bellcore version from the sor file and returns it.
 func (d *otdrRawData) getBellCoreVersion() {
-	d.BellCoreVersion = float32(parsHexValue(d.HexData[(d.SecLocs["Map"][0]+4)*2:(d.SecLocs["Map"][0]+5)*2])) / 100.0
+	d.BellCoreVersion = float64(parsHexValue(d.HexData[(d.SecLocs["Map"][0]+4)*2:(d.SecLocs["Map"][0]+5)*2])) / 100.0
 }
 
-// TotalLoss reads the total loss of the fiber from the sor file and returns it.
+// getTotalLoss reads the total loss of the fiber from the sor file and returns it.
 func (d *otdrRawData) getTotalLoss() {
 	if len(d.SecLocs["WaveMTSParams"]) > 0 {
 		totallossinfo := d.HexData[(d.SecLocs["WaveMTSParams"][1]-22)*2 : (d.SecLocs["WaveMTSParams"][1]-18)*2]
-		d.TotalLoss = float32(parsHexValue(totallossinfo)) * 0.001
+		d.TotalLoss = float64(parsHexValue(totallossinfo)) * 0.001
 	} else {
 		d.TotalLoss = 0
 	}
 }
 
-// KeyEvents function extracts the events information from the sor file and stores it in OTDREvent struct.
+// getKeyEvents function extracts the events information from the sor file and stores it in OTDREvent struct.
 func (d *otdrRawData) getKeyEvents() {
 
 	d.Events = map[int]OTDREvent{}
@@ -430,12 +515,12 @@ func (d *otdrRawData) getKeyEvents() {
 			event.EventLocM = event.EventLocM + -stValue
 		}
 
-		event.Slope = float32(parsHexValue(e[12:16])) * 0.001
-		event.SpliceLoss = float32(parsHexValue(e[16:20])) * 0.001
+		event.Slope = float64(parsHexValue(e[12:16])) * 0.001
+		event.SpliceLoss = float64(parsHexValue(e[16:20])) * 0.001
 		if parsHexValue(e[20:28]) > 0 {
-			event.RefLoss = float32((float64(parsHexValue(e[20:28])) - math.Pow(2, 32)) * 0.001)
+			event.RefLoss = float64((float64(parsHexValue(e[20:28])) - math.Pow(2, 32)) * 0.001)
 		} else {
-			event.RefLoss = float32(parsHexValue(e[20:28]))
+			event.RefLoss = float64(parsHexValue(e[20:28]))
 		}
 
 		eventType, err := hex.DecodeString(e[28:44])
@@ -462,7 +547,28 @@ func (d *otdrRawData) getKeyEvents() {
 }
 
 func (d *otdrRawData) export2Json() {
-	b, err := json.MarshalIndent(d, "", "  ")
+
+	var exportData = struct {
+		Filename        string            `json:"File Name"`
+		FixedParams     FixInfo           `json:"Fixed Parameters"`
+		TotalLoss       float64           `json:"Total Fiber Loss(dB)"`
+		TotalLength     float64           `json:"Fiber Length(km)"`
+		GenParams       GenParam          `json:"General Information"`
+		Supplier        SupParam          `json:"Supplier Information"`
+		Events          map[int]OTDREvent `json:"Key Events"`
+		BellCoreVersion float64           `json:"Bellcore Version"`
+	}{
+		Filename:        d.Filename,
+		FixedParams:     d.FixedParams,
+		TotalLoss:       d.TotalLoss,
+		TotalLength:     d.TotalLength,
+		GenParams:       d.GenParams,
+		Supplier:        d.Supplier,
+		Events:          d.Events,
+		BellCoreVersion: d.BellCoreVersion,
+	}
+
+	b, err := json.MarshalIndent(exportData, "", "  ")
 	errDealer(err)
 	_ = os.WriteFile("OTDR_Output.json", b, 0644)
 	fmt.Println("Json file has been exported! - json file name: OTDR_Output.json")
@@ -478,11 +584,8 @@ func getCliArgs() string {
 	return *filePath
 }
 
-func main() {
-
-	defer customPanicHandler()
-
-	d := ReadSorFile(getCliArgs())
+func ParseOTDRFile(fileName string) {
+	d := ReadSorFile(fileName)
 	d.GetOrder()
 	d.getBellCoreVersion()
 	d.getTotalLoss()
@@ -493,4 +596,13 @@ func main() {
 	d.getKeyEvents()
 	d.getFiberLength()
 	d.export2Json()
+	gochart(d.DataPoints, d.Events)
+}
+
+func main() {
+
+	defer customPanicHandler()
+
+	fileName := getCliArgs()
+	ParseOTDRFile(fileName)
 }
