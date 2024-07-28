@@ -9,140 +9,128 @@ Formulas and blueprint of this script are inspired by the information provided b
 Sidney Li
 http://morethanfootnotes.blogspot.com/2015/07/
 */
+
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
+	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 )
 
-//lightSpeed is the speed of light in a vaccuum to be used for refractive index and fiber length calculation.
+// lightSpeed is the speed of light in a vaccuum to be used for refractive index and fiber length calculation.
 const lightSpeed = 299.79181901 // m/µsec
 
-//OTDRData is the struct wrapping all the extracted information and will be exported as JSON.
-type OTDRData struct {
-	Supplier        SupParam
-	GenInfo         GenParam `json:"General Information"`
-	Events          []OTDREvent
-	FixInfo         FixInfo `json:"Fixed Parameters"`
-	FiberLength     float32 `json:"Fiber Length(km)"`
-	BellCoreVersion float32 `json:"Bellcore Version"`
-	TotalLoss       float32 `json:"Total Fiber Loss(dB)"`
-	AvgLoss         float32 `json:"Average Loss per Km(dB)"`
-}
-
-//SupParam is the Supplier Parameters extracted from the sor file.
-type SupParam struct {
-	OTDRSupplier   string `json:"OTDR Supplier"`
-	OTDRName       string `json:"OTDR Name"`
-	OTDRsn         string `json:"OTDR SN"`
-	OTDRModuleName string `json:"OTDR Module Name"`
-	OTDRModuleSN   string `json:"OTDR Module SN"`
-	OTDRswVersion  string `json:"OTDR SW Version"`
-	OTDROtherInfo  string `json:"OTDR Other Info"`
-}
-
-//GenParams is the General Parameters extracted from the sor file.
-type GenParam struct {
-	CableID        string `json:"Cable Id"`
-	Lang           string `json:"Language"`
-	FiberID        string `json:"Fiber Id"`
-	LocationA      string
-	LocationB      string
-	BuildCondition string `json:"Build Condition"`
-	Comment        string
-	CableCode      string `json:"Cable Code"`
-	Operator       string
-	FiberType      string `json:"Fiber Type"`
-	OTDRWavelength string `json:"OTDR Wavelength"`
-}
-
-//OTDREvent is the event information extracted from the sor file.
-type OTDREvent struct {
-	EventType          string  `json:"Event Type"`
-	EventLocM          float32 `json:"Event Point(m)"`
-	EventNumber        int     `json:"Event Number"`
-	Slope              float32 `json:"Slope(dB)"`
-	SpliceLoss         float32 `json:"Splice Loss(dB)"`
-	RefLoss            float32 `json:"Reflection Loss(dB)"`
-	EndOfPreviousEvent int     `json:"Previous Event-End"`
-	BegOfCurrentEvent  int     `json:"Current Event-Start"`
-	EndOfCurrentEvent  int     `json:"Current Event-End"`
-	BegOfNextEvent     int     `json:"Next Event-Start"`
-	PeakCurrentEvent   int     `json:"Peak point"`
-}
-
-//FixInfos struct is the Fixed parameters extracted from the sor file.
-type FixInfo struct {
-	DateTime       time.Time
-	Unit           string
-	ActualWL       float32 `json:"Actual Wavelength"`
-	PulseWidthNo   int64   `json:"Pulse Width No"`
-	PulseWidth     int64   `json:"Pulse Width(ns)"`
-	SampleQTY      int64   `json:"Sample Quantity"`
-	IOR            int64
-	RefIndex       float32 `json:"Refraction Index"`
-	FiberSpeed     float32 `json:"Fiber Light Speed"`
-	Resolution     float32 `json:"Scan Resolution"`
-	Backscattering float32 `json:"Back-Scattering"`
-	Averaging      int64
-	AveragingTime  float32 `json:"Averaging Time"`
-	Range          float32 `json:"Scan Range"`
-}
-
-//errDealer will handle the errors.
+// errDealer handles the errors.
 func errDealer(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-/*
-	ReadSorFile function opens the sor file and returns a hex string (hexData)
-	and a text string (charString) from the file to the main function,
-	Basically reading the whole file and putting it in RAM.
-*/
-func ReadSorFile(filename string) (string, string) {
-
-	var array []byte
-	var hexData string
-
-	f, err := os.Open(filename)
-	errDealer(err)
-
-	defer f.Close()
-
-	for {
-		eachByte := make([]byte, 1)
-		_, err = f.Read(eachByte)
-
-		if err == io.EOF {
-			break
-		}
-		errDealer(err)
-
-		array = append(array, eachByte...)
-	}
-	//Converting the byte array into a hex String
-	hexData = hex.EncodeToString(array)
-
-	//Converting the HexData to a text string
-	chars, err := hex.DecodeString(hexData)
-	errDealer(err)
-
-	charString := string(chars)
-	return hexData, charString
+func mod(a, b float64) float64 {
+	return a - b*math.Floor(a/b)
 }
 
-//Reverse will reverse the hex string in every 2 bytes. Example: 0ABCD123 => 23D1BC0A.
+func removePaths(stack []byte) []byte {
+	lines := bytes.Split(stack, []byte("\n"))
+	for i, line := range lines {
+		if idx := bytes.LastIndex(line, []byte("/go/")); idx != -1 {
+			lines[i] = line[idx+4:]
+		} else if idx := bytes.Index(line, []byte(":")); idx != -1 {
+			lines[i] = line[idx:]
+		}
+	}
+	return bytes.Join(lines, []byte("\n"))
+}
+
+func customPanicHandler() {
+	if r := recover(); r != nil {
+		// Get the stack trace
+		stack := debug.Stack()
+
+		// Remove file paths from the stack trace
+		sanitizedStack := removePaths(stack)
+
+		// Log or print the sanitized stack trace
+		fmt.Printf("Panic: %v\n%s", r, sanitizedStack)
+
+		// Optionally, exit the program
+		os.Exit(1)
+	}
+}
+
+/*
+ReadSorFile function opens the sor file and returns a hex string (hexData)
+and a text string (charString) from the file to the main function,
+Basically reading the whole file and putting it in RAM.
+*/
+func ReadSorFile(filename string) otdrRawData {
+
+	r := otdrRawData{
+		Filename: filename,
+	}
+
+	// var array []byte
+	// var hexData string
+
+	// f, err := os.Open(filename)
+	// errDealer(err)
+
+	// defer f.Close()
+
+	// for {
+	// 	eachByte := make([]byte, 1)
+	// 	_, err = f.Read(eachByte)
+
+	// 	if err == io.EOF {
+	// 		break
+	// 	}
+	// 	errDealer(err)
+
+	// 	array = append(array, eachByte...)
+	// }
+	f, err := os.Open(filename)
+	if err != nil {
+		errDealer(err)
+	}
+	defer f.Close()
+
+	// Get the file size
+	stat, err := f.Stat()
+	if err != nil {
+		errDealer(err)
+	}
+
+	// Read the entire file at once
+	buffer := make([]byte, stat.Size())
+	_, err = io.ReadFull(f, buffer)
+	if err != nil {
+		errDealer(err)
+	}
+
+	//Converting the byte array into a hex String
+	r.HexData = hex.EncodeToString(buffer)
+
+	//Converting the HexData to a text string
+	chars, err := hex.DecodeString(r.HexData)
+	errDealer(err)
+
+	r.Decodedfile = string(chars)
+	return r
+}
+
+// Reverse will reverse the hex string in every 2 bytes. Example: 0ABCD123 => 23D1BC0A.
 func Reverse(s string) string {
 	str := ""
 	for ind := 0; ind < len(s); ind += 2 {
@@ -151,8 +139,12 @@ func Reverse(s string) string {
 	return str
 }
 
-//HexParser calls the Reverse() funcition to reverse the order of the provided HexString and then converts it's value to int64.
-func HexParser(hexData string) int64 {
+func dB(point int64) float64 {
+	return float64(point*-1000) * math.Pow(10, -6)
+}
+
+// parsHexValue calls the Reverse() funcition to reverse the order of the provided HexString and then converts it's value to int64.
+func parsHexValue(hexData string) int64 {
 	output, err := strconv.ParseInt(Reverse(hexData), 16, 64)
 	if err != nil {
 		fmt.Println(err)
@@ -161,43 +153,195 @@ func HexParser(hexData string) int64 {
 	return output
 }
 
-//FixedParams function extracts the Fixed Parameters from the sor file and stores it in FixInfos struct.
-func FixedParams(hexData, charString string) FixInfo {
+func (d *otdrRawData) mapKeyEvents(events string) map[int][2]int {
+	m := make(map[int][2]int)
+	start := 4
+	evnumbers := int(parsHexValue(events[:start]))
 
-	fixInfo := hexData[(strings.Index(charString[224:], "FxdParams")+234)*2 : (strings.Index(charString[224:], "DataPts")+224)*2]
-
-	unit, err := hex.DecodeString(fixInfo[8:12])
-	errDealer(err)
-
-	ior := HexParser(fixInfo[56:64])
-	refIndex := float32(ior) * float32(math.Pow(10, -5))
-	fiberSpeed := lightSpeed / refIndex
-	resolution := float32(HexParser(fixInfo[40:48])) * float32(math.Pow(10, -8)) * fiberSpeed
-	sampleQTY := HexParser(fixInfo[48:56])
-
-	fixParam := FixInfo{
-		DateTime:       time.Unix(HexParser(fixInfo[:8]), 0),
-		Unit:           string(unit),
-		ActualWL:       float32(HexParser(fixInfo[12:16])) / 10.0,
-		PulseWidthNo:   HexParser(fixInfo[32:36]),
-		PulseWidth:     HexParser(fixInfo[36:40]),
-		SampleQTY:      sampleQTY,
-		IOR:            ior,
-		RefIndex:       refIndex,
-		FiberSpeed:     fiberSpeed,
-		Resolution:     resolution,
-		Backscattering: float32(HexParser(fixInfo[64:68])) * -0.1,
-		Averaging:      HexParser(fixInfo[68:76]),
-		AveragingTime:  float32(HexParser(fixInfo[76:80])) / 600,
-		Range:          float32(sampleQTY) * resolution,
+	for i := 1; i <= evnumbers; i++ {
+		if i == evnumbers {
+			m[i] = [2]int{start, len(events) - 46}
+		} else {
+			end := strings.Index(events[start+84:], fmt.Sprintf("%02x00", i+1))
+			if end == -1 {
+				fmt.Println("pattern not found:", events)
+				return nil
+			}
+			end += start + 84
+			m[i] = [2]int{start, end}
+			start = end
+		}
 	}
-	return fixParam
+
+	return m
 }
 
-//SupParams function extracts the Supplier Parameters from the sor file and stores it in SupParam struct.
-func SupParams(charString string) SupParam {
-	supString := charString[strings.Index(charString[224:], "SupParams")+234 : strings.Index(charString[224:], "FxdParams")+224]
-	slicedParams := strings.Split(supString, "\x00")[:7]
+func (d *otdrRawData) GetNext(key string) string {
+	if _, exists := d.SecLocs[key]; !exists {
+		return ""
+	}
+
+	index := d.SecLocs[key][0]
+	var nextKey string
+	nextIndex := math.Inf(1)
+
+	for k, v := range d.SecLocs {
+		if k == key || len(v) == 0 {
+			continue
+		}
+		if float64(index) < float64(v[0]) && float64(v[0]) < nextIndex {
+			nextIndex = float64(v[0])
+			nextKey = k
+		}
+	}
+
+	return nextKey
+}
+
+func (d *otdrRawData) GetOrder() {
+	sections := []string{
+		"SupParams",
+		"ExfoNewProprietaryBlock",
+		"Map",
+		"FxdParams",
+		"DataPts",
+		"NokiaParams",
+		"KeyEvents",
+		"GenParams",
+		"WaveMTSParams",
+		"WavetekTwoMTS",
+		"WavetekThreeMTS",
+		"BlocOtdrPrivate",
+		"ActernaConfig",
+		"ActernaMiniCurve",
+		"JDSUEvenementsMTS",
+		"Cksum",
+	}
+
+	sectionLocations := make(map[string][]int)
+
+	for _, word := range sections {
+		re := regexp.MustCompile(regexp.QuoteMeta(word))
+		matches := re.FindAllStringIndex(d.Decodedfile, -1)
+		locations := make([]int, len(matches))
+		for i, match := range matches {
+			locations[i] = match[0]
+		}
+		sectionLocations[word] = locations
+	}
+
+	if len(sectionLocations["Cksum"]) < 2 {
+		fmt.Printf("%s file has no checksum\n", d.Filename)
+		os.Exit(1)
+	}
+
+	d.SecLocs = sectionLocations
+}
+
+// FixedParams function extracts the Fixed Parameters from the sor file and stores it in FixInfos struct.
+func (d *otdrRawData) getFixedParams() {
+
+	f := FixInfo{}
+
+	fixInfo := d.HexData[(d.SecLocs["FxdParams"][1]+10)*2 : (d.SecLocs[d.GetNext("FxdParams")][1] * 2)]
+	p := 8
+
+	f.DateTime = time.Unix(parsHexValue(fixInfo[:p]), 0)
+
+	unit, err := hex.DecodeString(fixInfo[p : p+4])
+	errDealer(err)
+	p += 4
+
+	f.ActualWL = float64(parsHexValue(fixInfo[p:p+4])) / 10.0
+	p += 4
+
+	f.AO = float64(parsHexValue(fixInfo[p : p+8]))
+	p += 8
+
+	f.AOD = float64(parsHexValue(fixInfo[p : p+8]))
+	p += 8
+
+	f.PulseWidthNo = parsHexValue(fixInfo[p : p+4])
+	p += 4
+
+	for i := 0; i < int(f.PulseWidthNo); i++ {
+		f.PulseWidth = append(f.PulseWidth, parsHexValue(fixInfo[p:p+4]))
+		p += 4
+	}
+
+	resolution_m_p1 := []float64{}
+	for i := 0; i < int(f.PulseWidthNo); i++ {
+		resolution_m_p1 = append(resolution_m_p1, float64(parsHexValue(fixInfo[p:p+8]))*math.Pow(10, -8))
+		p += 8
+	}
+
+	for i := 0; i < int(f.PulseWidthNo); i++ {
+		f.SampleQTY = append(f.SampleQTY, parsHexValue(fixInfo[p:p+8]))
+		p += 8
+	}
+
+	f.IOR = float64(parsHexValue(fixInfo[p : p+8]))
+	p += 8
+
+	f.RefIndex = f.IOR * math.Pow(10, -5)
+
+	f.FiberSpeed = lightSpeed / f.RefIndex
+
+	for i := 0; i < int(f.PulseWidthNo); i++ {
+		f.Resolution = append(f.Resolution, resolution_m_p1[i]*f.FiberSpeed)
+	}
+
+	f.Backscattering = float64(parsHexValue(fixInfo[p:p+4])) * -0.1
+	p += 4
+
+	f.Averaging = parsHexValue(fixInfo[p : p+8])
+	p += 8
+
+	f.AveragingTime = float64(parsHexValue(fixInfo[p:p+4])) / 600
+	p += 4
+
+	for i := 0; i < int(f.PulseWidthNo); i++ {
+		f.Range = append(f.Range, float64(f.SampleQTY[i])*f.Resolution[i])
+	}
+
+	f.Unit = string(unit)
+
+	d.FixedParams = f
+
+}
+
+func (d *otdrRawData) getDataPoints() {
+	dtpoints := d.HexData[d.SecLocs["DataPts"][1]*2 : d.SecLocs[d.GetNext("DataPts")][1]*2][40:]
+	start := 0
+	cumulative_length := 0
+
+	for i := range d.FixedParams.SampleQTY {
+
+		qty := int(d.FixedParams.SampleQTY[i])
+		resolution := int(d.FixedParams.Resolution[i])
+
+		for j := 0; j < qty; j++ {
+			index := start + j
+			if index < len(dtpoints) {
+				hex_value := dtpoints[index*4 : index*4+4]
+				db_value := dB(parsHexValue(hex_value))
+				passedlen := math.Round(float64(cumulative_length*1000)) / 1000
+				dataPoint := []float64{passedlen, db_value}
+				d.Distance = append(d.Distance, passedlen)
+				d.Power = append(d.Power, db_value)
+				d.DataPoints = append(d.DataPoints, dataPoint)
+				cumulative_length += resolution
+			}
+		}
+		start += qty
+	}
+
+}
+
+// SupParams function extracts the Supplier Parameters from the sor file and stores it in SupParam struct.
+func (d *otdrRawData) getSupParams() {
+	supString := strings.Split(d.Decodedfile[d.SecLocs["SupParams"][1]+10:d.SecLocs[d.GetNext("SupParams")][1]], "\x00")
+	slicedParams := supString[:len(supString)-1]
 
 	supInfo := SupParam{
 		OTDRSupplier:   strings.TrimSpace(slicedParams[0]),
@@ -208,143 +352,145 @@ func SupParams(charString string) SupParam {
 		OTDRswVersion:  strings.TrimSpace(slicedParams[5]),
 		OTDROtherInfo:  strings.TrimSpace(slicedParams[6]),
 	}
-	return supInfo
+
+	d.Supplier = supInfo
 }
 
-//GenParams function extracts the General Parameters from the sor file and stores it in GenParam struct.
-func GenParams(charString string) GenParam {
+// GenParams function extracts the General Parameters from the sor file and stores it in GenParam struct.
+func (d *otdrRawData) getGenParams() {
 
-	genString := charString[strings.Index(charString[224:], "GenParams")+234 : strings.Index(charString[224:], "SupParams")+224]
-	slicedParams := strings.Split(genString, "\x00")
-
-	buildConditionTemplate := map[string]string{"BC": "as-built",
-		"CC": "as-current",
-		"RC": "as-repaired",
-		"OT": "other",
-	}
+	genStringBeforeSplit := strings.Split(d.Decodedfile[d.SecLocs["GenParams"][1]+10:d.SecLocs[d.GetNext("GenParams")][1]], "\x00")
+	genString := genStringBeforeSplit[:len(genStringBeforeSplit)-1]
 
 	genInfo := GenParam{
-		CableID:        strings.TrimSpace(slicedParams[0][2:]),
-		Lang:           strings.TrimSpace(slicedParams[0][:2]),
-		FiberID:        strings.TrimSpace(slicedParams[1]),
-		LocationA:      strings.TrimSpace(slicedParams[2][4:]),
-		LocationB:      strings.TrimSpace(slicedParams[3]),
-		CableCode:      strings.TrimSpace(slicedParams[4]),
-		BuildCondition: buildConditionTemplate[strings.TrimSpace(slicedParams[5])],
-		Operator:       strings.TrimSpace(slicedParams[13]),
-		Comment:        strings.TrimSpace(slicedParams[14]),
-		FiberType:      "G." + strconv.FormatInt(HexParser(hex.EncodeToString([]byte(slicedParams[2][:2]))), 10),
-		OTDRWavelength: strconv.FormatInt(HexParser(hex.EncodeToString([]byte(slicedParams[2][2:4]))), 10) + " nm",
-	}
-	return genInfo
-}
-
-//FiberLength calculates the fiber length and returns it.
-func FiberLength(hexData, charString string, fixParams FixInfo) float32 {
-	length := float32(HexParser(hexData[(strings.Index(charString[224:], "WaveMTSParams")+210)*2 : (strings.Index(charString[224:], "WaveMTSParams")+214)*2]))
-	return (length * float32(math.Pow(10, -4)) * lightSpeed / fixParams.RefIndex) / 1000
-}
-
-//BellCoreVersion reads the bellcore version from the sor file and returns it.
-func BellCoreVersion(hexData, charString string) float32 {
-	return float32(HexParser(hexData[(strings.Index(charString, "Map")+4)*2:(strings.Index(charString, "Map")+5)*2])) / 100.0
-}
-
-//TotalLoss reads the total loss of the fiber from the sor file and returns it.
-func TotalLoss(hexData, charString string) float32 {
-	totallossinfo := hexData[(strings.Index(charString[224:], "WaveMTSParams")+202)*2 : (strings.Index(charString[224:], "WaveMTSParams")+206)*2]
-	return float32(HexParser(totallossinfo)) * 0.001
-}
-
-//KeyEvents function extracts the events information from the sor file and stores it in OTDREvent struct.
-func KeyEvents(hexData string, charString string, fiberSpeed float32, resolution float32) []OTDREvent {
-	var keyevents []OTDREvent
-	events := hexData[(strings.Index(charString[224:], "KeyEvents")+224)*2 : (strings.Index(charString[224:], "WaveMTSParams")+224)*2]
-	evnumbers := HexParser(events[20:24])
-	var eventHEX = []string{}
-	for ind := 0; ind < int(88*evnumbers); ind += 88 {
-		eventHEX = append(eventHEX, events[24:][ind:ind+88])
+		CableID:        strings.TrimSpace(genString[0][2:]),
+		Lang:           strings.TrimSpace(genString[0][:2]),
+		FiberID:        strings.TrimSpace(genString[1]),
+		LocationA:      strings.TrimSpace(genString[2][4:]),
+		LocationB:      strings.TrimSpace(genString[3]),
+		CableCode:      strings.TrimSpace(genString[4]),
+		BuildCondition: genString[5],
+		Operator:       strings.TrimSpace(genString[13]),
+		Comment:        strings.TrimSpace(genString[14]),
+		FiberType:      "G." + strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(genString[2][:2]))), 10),
+		OTDRWavelength: strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(genString[2][2:4]))), 10) + " nm",
 	}
 
-	for e := range eventHEX {
-		eventType, err := hex.DecodeString(eventHEX[e][28:44])
+	d.GenParams = genInfo
+}
+
+// FiberLength calculates the fiber length and returns it.
+func (d *otdrRawData) getFiberLength() {
+	for _, v := range d.Events {
+		if strings.Contains(v.EventType, "EXX") || strings.Contains(v.EventType, "E99") {
+			d.TotalLength = float64(v.EventLocM)
+		}
+	}
+}
+
+// BellCoreVersion reads the bellcore version from the sor file and returns it.
+func (d *otdrRawData) getBellCoreVersion() {
+	d.BellCoreVersion = float32(parsHexValue(d.HexData[(d.SecLocs["Map"][0]+4)*2:(d.SecLocs["Map"][0]+5)*2])) / 100.0
+}
+
+// TotalLoss reads the total loss of the fiber from the sor file and returns it.
+func (d *otdrRawData) getTotalLoss() {
+	if len(d.SecLocs["WaveMTSParams"]) > 0 {
+		totallossinfo := d.HexData[(d.SecLocs["WaveMTSParams"][1]-22)*2 : (d.SecLocs["WaveMTSParams"][1]-18)*2]
+		d.TotalLoss = float32(parsHexValue(totallossinfo)) * 0.001
+	} else {
+		d.TotalLoss = 0
+	}
+}
+
+// KeyEvents function extracts the events information from the sor file and stores it in OTDREvent struct.
+func (d *otdrRawData) getKeyEvents() {
+
+	d.Events = map[int]OTDREvent{}
+
+	events := d.HexData[(d.SecLocs["KeyEvents"][1]+10)*2 : d.SecLocs[d.GetNext("KeyEvents")][1]*2]
+	p := d.mapKeyEvents(events)
+
+	var eventhexlist []string
+	for _, v := range p {
+		eventhexlist = append(eventhexlist, events[v[0]:v[1]])
+	}
+
+	for _, e := range eventhexlist {
+
+		event := OTDREvent{}
+		eNum := int(parsHexValue(e[:4]))
+
+		event.EventLocM = float64(parsHexValue(e[4:12])) * (math.Pow(10, -4)) * float64(d.FixedParams.FiberSpeed)
+
+		stValue := mod(event.EventLocM, d.FixedParams.Resolution[0])
+		if stValue >= d.FixedParams.Resolution[0]/2 {
+			event.EventLocM = event.EventLocM + (d.FixedParams.Resolution[0] - stValue)
+		} else {
+			event.EventLocM = event.EventLocM + -stValue
+		}
+
+		event.Slope = float32(parsHexValue(e[12:16])) * 0.001
+		event.SpliceLoss = float32(parsHexValue(e[16:20])) * 0.001
+		if parsHexValue(e[20:28]) > 0 {
+			event.RefLoss = float32((float64(parsHexValue(e[20:28])) - math.Pow(2, 32)) * 0.001)
+		} else {
+			event.RefLoss = float32(parsHexValue(e[20:28]))
+		}
+
+		eventType, err := hex.DecodeString(e[28:44])
 		errDealer(err)
-
-		EventLocM := float32(HexParser(eventHEX[e][4:12])) * float32(math.Pow(10, -4)) * fiberSpeed
-		stValue := float32(math.Mod(float64(EventLocM), float64(resolution)))
-		if stValue >= (resolution / 2.0) {
-			EventLocM = EventLocM + resolution - stValue
-		} else {
-			EventLocM = EventLocM - stValue
+		event.EventType = string(eventType)
+		event.EndOfPreviousEvent = int(parsHexValue(e[44:52]))
+		event.BegOfCurrentEvent = int(parsHexValue(e[52:60]))
+		event.EndOfCurrentEvent = int(parsHexValue(e[60:68]))
+		event.BegOfNextEvent = int(parsHexValue(e[68:76]))
+		event.PeakCurrentEvent = int(parsHexValue(e[76:84]))
+		if len(e) > 88 {
+			if len(e) < 102 {
+				comment, err := hex.DecodeString(e[84:])
+				errDealer(err)
+				event.Comment = string(comment)
+			} else {
+				comment, err := hex.DecodeString(e[84:102])
+				errDealer(err)
+				event.Comment = string(comment)
+			}
 		}
-
-		var refLoss float32
-		if HexParser(eventHEX[e][20:28]) > 0 {
-			refLoss = float32((float64(HexParser(eventHEX[e][20:28])) - math.Pow(2, 32)) * 0.001)
-		} else {
-			refLoss = float32(HexParser(eventHEX[e][20:28]))
-		}
-
-		eventEntry := OTDREvent{
-			EventNumber:        int(HexParser(eventHEX[e][:4])),
-			EventLocM:          EventLocM,
-			Slope:              float32(HexParser(eventHEX[e][12:16])) * 0.001,
-			SpliceLoss:         float32(HexParser(eventHEX[e][16:20])) * 0.001,
-			RefLoss:            refLoss,
-			EventType:          string(eventType),
-			EndOfPreviousEvent: int(HexParser(eventHEX[e][44:52])),
-			BegOfCurrentEvent:  int(HexParser(eventHEX[e][52:60])),
-			EndOfCurrentEvent:  int(HexParser(eventHEX[e][60:68])),
-			BegOfNextEvent:     int(HexParser(eventHEX[e][68:76])),
-			PeakCurrentEvent:   int(HexParser(eventHEX[e][76:84])),
-		}
-
-		keyevents = append(keyevents, eventEntry)
-		if string(eventEntry.EventType[1]) == "E" {
-			break
-		}
+		d.Events[eNum] = event
 	}
-	return keyevents
 }
 
-func JSONExport(data OTDRData) {
-	b, err := json.MarshalIndent(data, "", "  ")
+func (d *otdrRawData) export2Json() {
+	b, err := json.MarshalIndent(d, "", "  ")
 	errDealer(err)
-	_ = ioutil.WriteFile("OTDR_Output.json", b, 0644)
+	_ = os.WriteFile("OTDR_Output.json", b, 0644)
 	fmt.Println("Json file has been exported! - json file name: OTDR_Output.json")
+}
+
+func getCliArgs() string {
+
+	filePath := flag.String("sorfile", "", "Path to the sor file")
+	flag.StringVar(filePath, "s", "", "Path to the sor file")
+
+	flag.Parse()
+
+	return *filePath
 }
 
 func main() {
 
-	//This part is for reading the Sor file by getting it's path from the user.
-	var sorFileName string
-	fmt.Print("Enter the .sor filename: ")
-	fmt.Scanln(&sorFileName)
+	defer customPanicHandler()
 
-	/*
-		Invoking the filereader function, the result will be
-		a hex version of the sor file (hexData)and a text encoded
-		version of the sor file (charString)hexData will be
-		used to extract the numeric values while charString is used
-		to find the related sections and also for text data extraction.
-	*/
-	hexData, charString := ReadSorFile(sorFileName)
-
-	fixed := FixedParams(hexData, charString)
-	loss := TotalLoss(hexData, charString)
-	length := FiberLength(hexData, charString, fixed)
-
-	// OTDRData is the main struct which contains and gather all the extracted information to be converted into JSON format.
-	OTDRExtractedData := OTDRData{
-		FixInfo:         fixed,                                                              //Fixed params that are extracted above.
-		Supplier:        SupParams(charString),                                              //OTDR Module Supplier Information.
-		GenInfo:         GenParams(charString),                                              //OTDR scan General Information.
-		Events:          KeyEvents(hexData, charString, fixed.FiberSpeed, fixed.Resolution), //OTDR scan key events like loss events and reflection events.
-		TotalLoss:       loss,                                                               //Total fiber loss value of the scan, end to end in dB.
-		FiberLength:     length,                                                             //Total fiber length, end to end.
-		BellCoreVersion: BellCoreVersion(hexData, charString),                               //Bellcore version of the file, 2.1 is supported by this script.
-		AvgLoss:         loss / length,
-	}
-
-	JSONExport(OTDRExtractedData)
+	d := ReadSorFile(getCliArgs())
+	d.GetOrder()
+	d.getBellCoreVersion()
+	d.getTotalLoss()
+	d.getSupParams()
+	d.getGenParams()
+	d.getFixedParams()
+	d.getDataPoints()
+	d.getKeyEvents()
+	d.getFiberLength()
+	d.export2Json()
 }

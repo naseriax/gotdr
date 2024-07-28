@@ -4,7 +4,6 @@
 
 - Usage:
 ```
-#go run gotdr.go
+#./gotdr -s filepath
 
-File Name: sorfiles/2.sor
 ```
