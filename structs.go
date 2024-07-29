@@ -59,6 +59,7 @@ type OTDREvent struct {
 	BegOfNextEvent     int     `json:"Next Event-Start"`
 	PeakCurrentEvent   int     `json:"Peak point"`
 	Comment            string  `json:"Comment"`
+	Power              float64 `json:"Power"`
 }
 
 // FixInfos struct is the Fixed parameters extracted from the sor file.

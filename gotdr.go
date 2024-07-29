@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -35,7 +36,7 @@ const lightSpeed = 299.79181901 // m/µsec
 
 func errDealer(err error) {
 	if err != nil {
-		panic(err)
+		log.Fatalln(err.Error())
 	}
 }
 
@@ -56,79 +57,6 @@ func openBrowser(url string) {
 	if err != nil {
 		fmt.Printf("Failed to open browser: %v\n", err)
 	}
-}
-
-func gochart(data [][]float64, events map[int]OTDREvent) {
-
-	// Create a new line chart instance
-	xValues := make([]opts.LineData, len(data))
-	yValues := make([]opts.LineData, len(data))
-
-	for i, point := range data {
-		xValues[i] = opts.LineData{Value: point[0]}
-		yValues[i] = opts.LineData{Value: point[1]}
-	}
-
-	// Create a new line chart instance
-	line := charts.NewLine()
-
-	// Set global options like title and legend
-	line.SetGlobalOptions(
-		charts.WithTitleOpts(opts.Title{
-			Title:    "Zoomable Line Chart with Annotations",
-			Subtitle: "This is a zoomable line chart with annotations",
-		}),
-		charts.WithToolboxOpts(opts.Toolbox{
-			// Show: true,
-			Feature: &opts.ToolBoxFeature{
-				DataZoom: &opts.ToolBoxFeatureDataZoom{
-					// Show: true,
-				},
-			},
-		}),
-		charts.WithDataZoomOpts(opts.DataZoom{
-			Type:       "inside",
-			Start:      0,
-			End:        100,
-			XAxisIndex: []int{0},
-		}),
-		charts.WithDataZoomOpts(opts.DataZoom{
-			Type:       "slider",
-			Start:      0,
-			End:        100,
-			XAxisIndex: []int{0},
-		}),
-		charts.WithTitleOpts(opts.Title{
-			Title: "markpoint options",
-		}),
-	)
-
-	markPoints := make([]opts.MarkPointNameCoordItem, 0, len(data))
-
-	markPoints = append(markPoints, opts.MarkPointNameCoordItem{
-		Value:      "1",
-		Name:       "Event 10",
-		Coordinate: []interface{}{events[3].EventLocM, -31.703},
-		Symbol:     "arrow",
-	})
-
-	// Add data to the line chart
-	line.SetXAxis(xValues).AddSeries("Category A", yValues,
-		charts.WithMarkPointNameCoordItemOpts(markPoints...))
-	line.SetSeriesOptions(charts.WithMarkPointNameTypeItemOpts(
-		opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
-		opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
-		opts.MarkPointNameTypeItem{Name: "Minimum", Type: "vertical"},
-	),
-		charts.WithMarkPointStyleOpts(
-			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
-	)
-
-	f, _ := os.Create("line.html")
-	line.Render(f)
-
-	openBrowser("line.html")
-
 }
 
 func mod(a, b float64) float64 {
@@ -163,31 +91,25 @@ func customPanicHandler() {
 	}
 }
 
+// Reverse will reverse the hex string in every 2 bytes. Example: 0ABCD123 => 23D1BC0A.
+func Reverse(s string) string {
+	str := ""
+	for ind := 0; ind < len(s); ind += 2 {
+		str = s[ind:ind+2] + str
+	}
+	return str
+}
+
+func dB(point int64) float64 {
+	return float64(point*-1000) * math.Pow(10, -6)
+}
+
 func ReadSorFile(filename string) otdrRawData {
 
 	r := otdrRawData{
 		Filename: filename,
 	}
 
-	// var array []byte
-	// var hexData string
-
-	// f, err := os.Open(filename)
-	// errDealer(err)
-
-	// defer f.Close()
-
-	// for {
-	// 	eachByte := make([]byte, 1)
-	// 	_, err = f.Read(eachByte)
-
-	// 	if err == io.EOF {
-	// 		break
-	// 	}
-	// 	errDealer(err)
-
-	// 	array = append(array, eachByte...)
-	// }
 	f, err := os.Open(filename)
 	if err != nil {
 		errDealer(err)
@@ -218,19 +140,6 @@ func ReadSorFile(filename string) otdrRawData {
 	return r
 }
 
-// Reverse will reverse the hex string in every 2 bytes. Example: 0ABCD123 => 23D1BC0A.
-func Reverse(s string) string {
-	str := ""
-	for ind := 0; ind < len(s); ind += 2 {
-		str = s[ind:ind+2] + str
-	}
-	return str
-}
-
-func dB(point int64) float64 {
-	return float64(point*-1000) * math.Pow(10, -6)
-}
-
 // parsHexValue calls the Reverse() funcition to reverse the order of the provided HexString and then converts it's value to int64.
 func parsHexValue(hexData string) int64 {
 	output, err := strconv.ParseInt(Reverse(hexData), 16, 64)
@@ -239,6 +148,107 @@ func parsHexValue(hexData string) int64 {
 		return 0
 	}
 	return output
+}
+
+func (d *otdrRawData) draw() {
+
+	// Create a new line chart instance
+	xValues := make([]opts.LineData, len(d.DataPoints))
+	yValues := make([]opts.LineData, len(d.DataPoints))
+
+	for i, point := range d.DataPoints {
+		xValues[i] = opts.LineData{Value: point[0]}
+		yValues[i] = opts.LineData{Value: point[1]}
+	}
+
+	// Create a new line chart instance
+	line := charts.NewLine()
+
+	// Set global options like title and legend
+	line.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title:    "Zoomable Line Chart with Annotations",
+			Subtitle: "This is a zoomable line chart with annotations",
+		}),
+		charts.WithToolboxOpts(opts.Toolbox{
+			Show: opts.Bool(true),
+			Feature: &opts.ToolBoxFeature{
+				DataZoom: &opts.ToolBoxFeatureDataZoom{
+					Show: opts.Bool(true),
+				},
+			},
+		}),
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:       "inside",
+			Start:      0,
+			End:        100,
+			XAxisIndex: []int{0},
+		}),
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:       "slider",
+			Start:      0,
+			End:        100,
+			XAxisIndex: []int{0},
+		}),
+		charts.WithTitleOpts(opts.Title{
+			Title: "GOTDR Viewer",
+		}),
+	)
+
+	markPoints := make([]opts.MarkPointNameCoordItem, 0, len(d.DataPoints))
+
+	for _, ev := range d.Events {
+		loc := d.return_index(ev.EventLocM)
+		if loc[0] == 0 {
+			continue
+		}
+
+		markPoints = append(markPoints, opts.MarkPointNameCoordItem{
+			Name:       ev.EventType,
+			Coordinate: []interface{}{loc[0], loc[1]},
+			Symbol:     "pin",
+		})
+
+	}
+
+	// Add data to the line chart
+	line.SetXAxis(xValues).AddSeries("Reflection", yValues,
+		charts.WithMarkPointNameCoordItemOpts(markPoints...))
+
+	line.SetSeriesOptions(charts.WithMarkPointNameTypeItemOpts(
+		opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
+		opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
+		opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
+	),
+		charts.WithMarkPointStyleOpts(
+			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+	)
+
+	f, _ := os.Create("graph.html")
+	line.Render(f)
+
+	openBrowser("graph.html")
+}
+
+func (d *otdrRawData) return_index(loc float64) []float64 {
+
+	closest := []float64{math.Inf(0), 0}
+
+	for _, i := range d.DataPoints {
+		if i[0] == loc {
+			return i
+		}
+
+		if math.Abs(loc-i[0]) < math.Abs(loc-closest[0]) && i[0] < loc {
+			closest = i
+		}
+
+		if i[0] == d.DataPoints[len(d.DataPoints)-1][0] {
+			return closest
+		}
+	}
+
+	return []float64{0, 0}
 }
 
 func (d *otdrRawData) mapKeyEvents(events string) map[int][2]int {
@@ -425,6 +435,7 @@ func (d *otdrRawData) getDataPoints() {
 
 // SupParams function extracts the Supplier Parameters from the sor file and stores it in SupParam struct.
 func (d *otdrRawData) getSupParams() {
+
 	supString := strings.Split(d.Decodedfile[d.SecLocs["SupParams"][1]+10:d.SecLocs[d.GetNext("SupParams")][1]], "\x00")
 	slicedParams := supString[:len(supString)-1]
 
@@ -443,7 +454,6 @@ func (d *otdrRawData) getSupParams() {
 
 // GenParams function extracts the General Parameters from the sor file and stores it in GenParam struct.
 func (d *otdrRawData) getGenParams() {
-
 	genStringBeforeSplit := strings.Split(d.Decodedfile[d.SecLocs["GenParams"][1]+10:d.SecLocs[d.GetNext("GenParams")][1]], "\x00")
 	genString := genStringBeforeSplit[:len(genStringBeforeSplit)-1]
 
@@ -480,6 +490,7 @@ func (d *otdrRawData) getBellCoreVersion() {
 
 // getTotalLoss reads the total loss of the fiber from the sor file and returns it.
 func (d *otdrRawData) getTotalLoss() {
+
 	if len(d.SecLocs["WaveMTSParams"]) > 0 {
 		totallossinfo := d.HexData[(d.SecLocs["WaveMTSParams"][1]-22)*2 : (d.SecLocs["WaveMTSParams"][1]-18)*2]
 		d.TotalLoss = float64(parsHexValue(totallossinfo)) * 0.001
@@ -514,6 +525,8 @@ func (d *otdrRawData) getKeyEvents() {
 		} else {
 			event.EventLocM = event.EventLocM + -stValue
 		}
+
+		event.EventLocM = math.Round(event.EventLocM*1000) / 1000
 
 		event.Slope = float64(parsHexValue(e[12:16])) * 0.001
 		event.SpliceLoss = float64(parsHexValue(e[16:20])) * 0.001
@@ -581,10 +594,15 @@ func getCliArgs() string {
 
 	flag.Parse()
 
+	if len(*filePath) == 0 {
+		log.Fatalln("no file has been specified")
+	}
+
 	return *filePath
 }
 
 func ParseOTDRFile(fileName string) {
+
 	d := ReadSorFile(fileName)
 	d.GetOrder()
 	d.getBellCoreVersion()
@@ -596,7 +614,9 @@ func ParseOTDRFile(fileName string) {
 	d.getKeyEvents()
 	d.getFiberLength()
 	d.export2Json()
-	gochart(d.DataPoints, d.Events)
+
+	//Draw the graph
+	d.draw()
 }
 
 func main() {
