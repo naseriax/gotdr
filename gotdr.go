@@ -218,27 +218,28 @@ func (d *otdrRawData) draw() {
 			continue
 		}
 
-		markPoints = append(markPoints, opts.MarkPointNameCoordItem{
+		c := "blue"
+		if strings.Contains(ev.EventType, "EXXX") || strings.Contains(ev.EventType, "E999") {
+			c = "red"
+		}
+
+		mkpoint := opts.MarkPointNameCoordItem{
 			Name:       ev.EventType,
 			Coordinate: []interface{}{loc[0], loc[1]},
 			Symbol:     "pin",
 			ItemStyle: &opts.ItemStyle{
-				Color:   "blue",
+				Color:   c,
 				Opacity: 0.5,
 			},
 			SymbolSize: 35,
-		})
+		}
+		markPoints = append(markPoints, mkpoint)
 
 	}
 
 	// Add data to the line chart
 	line.SetXAxis(xValues).AddSeries("Reflection", yValues, charts.WithMarkPointNameCoordItemOpts(markPoints...))
 	line.SetSeriesOptions(
-		// charts.WithMarkPointNameTypeItemOpts(
-		// 	opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
-		// 	opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
-		// 	opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
-		// ),
 		charts.WithMarkPointStyleOpts(
 			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
 		charts.WithAreaStyleOpts(opts.AreaStyle{
@@ -254,7 +255,6 @@ func (d *otdrRawData) draw() {
 }
 
 func (d *otdrRawData) return_index(loc float64) []float64 {
-
 	closest := []float64{math.Inf(0), 0}
 
 	for ind, i := range d.DataPoints {
@@ -263,15 +263,13 @@ func (d *otdrRawData) return_index(loc float64) []float64 {
 		}
 
 		if math.Abs(loc-i[0]) < math.Abs(loc-closest[0]) && i[0] < loc {
-			closest = i
-		}
-
-		if i[0] == d.DataPoints[len(d.DataPoints)-1][0] {
-			return []float64{float64(ind), closest[1]}
+			closest = []float64{float64(ind), i[1]}
+		} else if i[0] > loc {
+			break
 		}
 	}
 
-	return []float64{0, 0}
+	return []float64{closest[0], closest[1]}
 }
 
 func (d *otdrRawData) mapKeyEvents(events string) map[int][2]int {
