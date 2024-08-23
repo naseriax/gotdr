@@ -173,6 +173,13 @@ func (d *otdrRawData) draw() {
 			Show: opts.Bool(true),
 			Feature: &opts.ToolBoxFeature{
 				DataZoom: &opts.ToolBoxFeatureDataZoom{
+					Show:       opts.Bool(true),
+					YAxisIndex: false,
+				},
+				Restore: &opts.ToolBoxFeatureRestore{
+					Show: opts.Bool(true),
+				},
+				SaveAsImage: &opts.ToolBoxFeatureSaveAsImage{
 					Show: opts.Bool(true),
 				},
 			},
