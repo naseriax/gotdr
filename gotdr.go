@@ -603,10 +603,21 @@ func (d *otdrRawData) export2Json() {
 	fmt.Println("Json file has been exported! - json file name: OTDR_Output.json")
 }
 
-func getCliArgs() string {
+func getCliArgs() map[string]*string {
 
-	filePath := flag.String("sorfile", "", "Path to the sor file")
-	flag.StringVar(filePath, "s", "", "Path to the sor file")
+	m := map[string]*string{}
+
+	filePath := flag.String("sorfile", "", "Mandatory - Path to the sor file")
+	flag.StringVar(filePath, "s", "", "Mandatory - Path to the sor file")
+	m["filePath"] = filePath
+
+	draw := flag.String("draw", "yes", "Optional - whether to draw the graph or not, yes , no")
+	flag.StringVar(draw, "d", "yes", "Optional - whether to draw the graph or not, yes , no")
+	m["draw"] = draw
+
+	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no")
+	flag.StringVar(json, "j", "yes", "Optional - whether to dump as json or not, yes , no")
+	m["json"] = json
 
 	flag.Parse()
 
@@ -614,12 +625,12 @@ func getCliArgs() string {
 		log.Fatalln("no file has been specified")
 	}
 
-	return *filePath
+	return m
 }
 
-func ParseOTDRFile(fileName string) {
+func ParseOTDRFile(args map[string]*string) {
 
-	d := ReadSorFile(fileName)
+	d := ReadSorFile(*args["filePath"])
 	d.GetOrder()
 	d.getBellCoreVersion()
 	d.getTotalLoss()
@@ -629,16 +640,22 @@ func ParseOTDRFile(fileName string) {
 	d.getDataPoints()
 	d.getKeyEvents()
 	d.getFiberLength()
-	d.export2Json()
+
+	if strings.EqualFold(*args["json"], "yes") {
+		d.export2Json()
+	}
 
 	//Draw the graph
-	d.draw()
+	if strings.EqualFold(*args["draw"], "yes") {
+
+		d.draw()
+	}
 }
 
 func main() {
 
 	defer customPanicHandler()
 
-	fileName := getCliArgs()
-	ParseOTDRFile(fileName)
+	args := getCliArgs()
+	ParseOTDRFile(args)
 }
