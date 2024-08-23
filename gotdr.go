@@ -166,9 +166,8 @@ func (d *otdrRawData) draw() {
 
 	// Set global options like title and legend
 	line.SetGlobalOptions(
-		charts.WithTitleOpts(opts.Title{
-			Title:    "Zoomable Line Chart with Annotations",
-			Subtitle: "This is a zoomable line chart with annotations",
+		charts.WithColorsOpts(opts.Colors{
+			"green",
 		}),
 		charts.WithToolboxOpts(opts.Toolbox{
 			Show: opts.Bool(true),
@@ -177,6 +176,11 @@ func (d *otdrRawData) draw() {
 					Show: opts.Bool(true),
 				},
 			},
+		}),
+
+		charts.WithInitializationOpts(opts.Initialization{
+			Width:  "1600px",
+			Height: "600px",
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "inside",
@@ -190,6 +194,9 @@ func (d *otdrRawData) draw() {
 			End:        100,
 			XAxisIndex: []int{0},
 		}),
+		charts.WithLegendOpts(opts.Legend{Show: opts.Bool(true)}),
+		charts.WithAnimation(true),
+
 		charts.WithTitleOpts(opts.Title{
 			Title: "GOTDR Viewer",
 		}),
@@ -199,6 +206,7 @@ func (d *otdrRawData) draw() {
 
 	for _, ev := range d.Events {
 		loc := d.return_index(ev.EventLocM)
+
 		if loc[0] == 0 {
 			continue
 		}
@@ -207,21 +215,29 @@ func (d *otdrRawData) draw() {
 			Name:       ev.EventType,
 			Coordinate: []interface{}{loc[0], loc[1]},
 			Symbol:     "pin",
+			ItemStyle: &opts.ItemStyle{
+				Color:   "blue",
+				Opacity: 0.5,
+			},
+			SymbolSize: 35,
 		})
 
 	}
 
 	// Add data to the line chart
-	line.SetXAxis(xValues).AddSeries("Reflection", yValues,
-		charts.WithMarkPointNameCoordItemOpts(markPoints...))
-
-	line.SetSeriesOptions(charts.WithMarkPointNameTypeItemOpts(
-		opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
-		opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
-		opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
-	),
+	line.SetXAxis(xValues).AddSeries("Reflection", yValues, charts.WithMarkPointNameCoordItemOpts(markPoints...))
+	line.SetSeriesOptions(
+		// charts.WithMarkPointNameTypeItemOpts(
+		// 	opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
+		// 	opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
+		// 	opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
+		// ),
 		charts.WithMarkPointStyleOpts(
 			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+		charts.WithAreaStyleOpts(opts.AreaStyle{
+			Color:   "yellow",
+			Opacity: 0.1,
+		}),
 	)
 
 	f, _ := os.Create("graph.html")
@@ -234,9 +250,9 @@ func (d *otdrRawData) return_index(loc float64) []float64 {
 
 	closest := []float64{math.Inf(0), 0}
 
-	for _, i := range d.DataPoints {
+	for ind, i := range d.DataPoints {
 		if i[0] == loc {
-			return i
+			return []float64{float64(ind), i[1]}
 		}
 
 		if math.Abs(loc-i[0]) < math.Abs(loc-closest[0]) && i[0] < loc {
@@ -244,7 +260,7 @@ func (d *otdrRawData) return_index(loc float64) []float64 {
 		}
 
 		if i[0] == d.DataPoints[len(d.DataPoints)-1][0] {
-			return closest
+			return []float64{float64(ind), closest[1]}
 		}
 	}
 
