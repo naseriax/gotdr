@@ -26,6 +26,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
@@ -155,14 +156,17 @@ func (d *otdrRawData) draw() {
 	// Create a new line chart instance
 	xValues := make([]opts.LineData, len(d.DataPoints))
 	yValues := make([]opts.LineData, len(d.DataPoints))
+	// yValues := make([]opts.ScatterData, len(d.DataPoints))
 
 	for i, point := range d.DataPoints {
 		xValues[i] = opts.LineData{Value: point[0]}
 		yValues[i] = opts.LineData{Value: point[1]}
+		// yValues[i] = opts.ScatterData{Value: point[1]}
 	}
 
 	// Create a new line chart instance
 	line := charts.NewLine()
+	// line := charts.NewScatter()
 
 	// Set global options like title and legend
 	line.SetGlobalOptions(
@@ -249,9 +253,170 @@ func (d *otdrRawData) draw() {
 	)
 
 	f, _ := os.Create("graph.html")
-	line.Render(f)
+	// line.Render(f)
+	d.generateHTML(f, line)
 
 	openBrowser("graph.html")
+}
+
+func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
+	// HTML header
+	w.Write([]byte(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Sales Report</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f0f0f0;
+                margin: 0;
+                padding: 20px;
+            }
+            .container {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                background-color: #ffffff;
+                border-radius: 10px;
+                padding: 15px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+            .chart {
+                width: 79%;
+            }
+            .summary {
+                width: 16%;
+                max-height: 600px;
+                overflow-y: auto;
+                background-color: #f9f9f9;
+                border-radius: 5px;
+                padding: 15px;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                font-size: 12px;
+            }
+            th, td {
+                border: 1px solid #e0e0e0;
+                padding: 3px;
+                text-align: left;
+            }
+            th {
+                background-color: #4a90e2;
+                color: white;
+            }
+            tr:nth-child(even) {
+                background-color: #f2f2f2;
+            }
+            h2 {
+                color: #333;
+                margin-top: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="chart">
+    `))
+
+	// Render the chart
+	line.Render(w)
+
+	tmpl := template.Must(template.New("summary").Parse(`
+ </div>
+            <div class="summary">
+                <h2>Summary</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fiber Attribute</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Date & Time</td>
+                            <td>{{.DT}}</td>
+                        </tr>
+                        <tr>
+                            <td>Unit</td>
+                            <td>{{.UNIT}}</td>
+                        </tr>
+						<tr>
+                            <td>Actual Wavelength</td>
+                            <td>{{.WL}} nm</td>
+                        </tr>
+						<tr>
+                            <td>Pulse Width QTY</td>
+                            <td>{{.PWQ}}</td>
+                        </tr>
+						<tr>
+                            <td>Pulse Width(ns)</td>
+                            <td>{{.PW}}</td>
+                        </tr>
+												<tr>
+                            <td>Sample Quantity</td>
+                            <td>{{.SQ}}</td>
+                        </tr>
+						<tr>
+                            <td>Fiber Light Speed</td>
+                            <td>{{.FLS}} km/s</td>
+                        </tr>
+						<tr>
+                            <td>Fiber Length (EOF)</td>
+                            <td>{{.FLEN}} m</td>
+                        </tr>
+						<tr>
+                            <td>Bellcore Version</td>
+                            <td>{{.BLV}}</td>
+                        </tr>
+						<tr>
+                            <td>Key Events</td>
+                            <td>{{.KE}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+    </html>
+`))
+
+	data := struct {
+		DT   time.Time
+		UNIT string
+		WL   float64
+		PWQ  int64
+		FLS  float64
+		PW   []int64
+		SQ   []int64
+		FLEN float64
+		BLV  float64
+		KE   int
+	}{
+		DT:   d.FixedParams.DateTime,
+		UNIT: d.FixedParams.Unit,
+		WL:   d.FixedParams.ActualWL,
+		PWQ:  d.FixedParams.PulseWidthNo,
+		FLS:  d.FixedParams.FiberSpeed,
+		PW:   d.FixedParams.PulseWidth,
+		SQ:   d.FixedParams.SampleQTY,
+		FLEN: d.TotalLength,
+		BLV:  d.BellCoreVersion,
+		KE:   len(d.Events),
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		log.Println("failed to create the html file")
+	}
+	htmlContent := buf.String()
+
+	// Add the summary table
+	w.Write([]byte(htmlContent))
 }
 
 func (d *otdrRawData) return_index(loc float64) []float64 {
