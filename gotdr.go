@@ -35,7 +35,7 @@ import (
 
 const lightSpeed = 299.79181901 // m/µsec
 
-func errDealer(err error) {
+func nukeIfErr(err error) {
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -113,21 +113,21 @@ func ReadSorFile(filename string) otdrRawData {
 
 	f, err := os.Open(filename)
 	if err != nil {
-		errDealer(err)
+		nukeIfErr(err)
 	}
 	defer f.Close()
 
 	// Get the file size
 	stat, err := f.Stat()
 	if err != nil {
-		errDealer(err)
+		nukeIfErr(err)
 	}
 
 	// Read the entire file at once
 	buffer := make([]byte, stat.Size())
 	_, err = io.ReadFull(f, buffer)
 	if err != nil {
-		errDealer(err)
+		nukeIfErr(err)
 	}
 
 	//Converting the byte array into a hex String
@@ -135,7 +135,7 @@ func ReadSorFile(filename string) otdrRawData {
 
 	//Converting the HexData to a text string
 	chars, err := hex.DecodeString(r.HexData)
-	errDealer(err)
+	nukeIfErr(err)
 
 	r.Decodedfile = string(chars)
 	return r
@@ -229,6 +229,7 @@ func (d *otdrRawData) draw() {
 
 		mkpoint := opts.MarkPointNameCoordItem{
 			Name:       ev.EventType,
+			Value:      strconv.Itoa(ev.EventNumber),
 			Coordinate: []interface{}{loc[0], loc[1]},
 			Symbol:     "pin",
 			ItemStyle: &opts.ItemStyle{
@@ -401,7 +402,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 		UNIT: d.FixedParams.Unit,
 		WL:   d.FixedParams.ActualWL,
 		PWQ:  d.FixedParams.PulseWidthNo,
-		FLS:  d.FixedParams.FiberSpeed,
+		FLS:  d.FixedParams.FiberSpeed * 1000,
 		PW:   d.FixedParams.PulseWidth,
 		SQ:   d.FixedParams.SampleQTY,
 		FLEN: d.TotalLength,
@@ -533,7 +534,7 @@ func (d *otdrRawData) getFixedParams() {
 	f.DateTime = time.Unix(parsHexValue(fixInfo[:p]), 0)
 
 	unit, err := hex.DecodeString(fixInfo[p : p+4])
-	errDealer(err)
+	nukeIfErr(err)
 	p += 4
 
 	f.ActualWL = float64(parsHexValue(fixInfo[p:p+4])) / 10.0
@@ -702,6 +703,7 @@ func (d *otdrRawData) getKeyEvents() {
 
 		event := OTDREvent{}
 		eNum := int(parsHexValue(e[:4]))
+		event.EventNumber = eNum
 
 		event.EventLocM = float64(parsHexValue(e[4:12])) * (math.Pow(10, -4)) * float64(d.FixedParams.FiberSpeed)
 
@@ -723,7 +725,7 @@ func (d *otdrRawData) getKeyEvents() {
 		}
 
 		eventType, err := hex.DecodeString(e[28:44])
-		errDealer(err)
+		nukeIfErr(err)
 		event.EventType = string(eventType)
 		event.EndOfPreviousEvent = int(parsHexValue(e[44:52]))
 		event.BegOfCurrentEvent = int(parsHexValue(e[52:60]))
@@ -733,11 +735,11 @@ func (d *otdrRawData) getKeyEvents() {
 		if len(e) > 88 {
 			if len(e) < 102 {
 				comment, err := hex.DecodeString(e[84:])
-				errDealer(err)
+				nukeIfErr(err)
 				event.Comment = string(comment)
 			} else {
 				comment, err := hex.DecodeString(e[84:102])
-				errDealer(err)
+				nukeIfErr(err)
 				event.Comment = string(comment)
 			}
 		}
@@ -768,7 +770,7 @@ func (d *otdrRawData) export2Json() {
 	}
 
 	b, err := json.MarshalIndent(exportData, "", "  ")
-	errDealer(err)
+	nukeIfErr(err)
 	_ = os.WriteFile("OTDR_Output.json", b, 0644)
 	fmt.Println("Json file has been exported! - json file name: OTDR_Output.json")
 }
