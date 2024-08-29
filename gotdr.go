@@ -190,8 +190,8 @@ func (d *otdrRawData) draw() {
 		}),
 
 		charts.WithInitializationOpts(opts.Initialization{
-			Width:  "1600px",
-			Height: "600px",
+			Width:  "1300px",
+			Height: "500px",
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "inside",
@@ -267,56 +267,8 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
     <html>
     <head>
         <meta charset="utf-8">
-        <title>Sales Report</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                background-color: #f0f0f0;
-                margin: 0;
-                padding: 20px;
-            }
-            .container {
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-                background-color: #ffffff;
-                border-radius: 10px;
-                padding: 15px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            }
-            .chart {
-                width: 79%;
-            }
-            .summary {
-                width: 16%;
-                max-height: 600px;
-                overflow-y: auto;
-                background-color: #f9f9f9;
-                border-radius: 5px;
-                padding: 15px;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                font-size: 12px;
-            }
-            th, td {
-                border: 1px solid #e0e0e0;
-                padding: 3px;
-                text-align: left;
-            }
-            th {
-                background-color: #4a90e2;
-                color: white;
-            }
-            tr:nth-child(even) {
-                background-color: #f2f2f2;
-            }
-            h2 {
-                color: #333;
-                margin-top: 0;
-            }
-        </style>
+        <title>KPI Report</title>
+		<link rel="stylesheet" href="style.css">
     </head>
     <body>
         <div class="container">
@@ -327,7 +279,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 	line.Render(w)
 
 	tmpl := template.Must(template.New("summary").Parse(`
- </div>
+ 			</div>
             <div class="summary">
                 <h2>Summary</h2>
                 <table>
@@ -358,7 +310,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
                             <td>Pulse Width(ns)</td>
                             <td>{{.PW}}</td>
                         </tr>
-												<tr>
+						<tr>
                             <td>Sample Quantity</td>
                             <td>{{.SQ}}</td>
                         </tr>

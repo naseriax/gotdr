@@ -1,0 +1,48 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 20px;
+  }
+  .container {
+    display: flex;
+    flex-direction: column; 
+    background-color: #ffffff;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+  .summary {
+    width: 98%; 
+    max-height: none; 
+    background-color: #f9f9f9;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+  }
+  .chart {
+    width: 100%;
+  }
+ 
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+  }
+  th, td {
+    border: 1px solid #e0e0e0;
+    padding: 3px;
+    text-align: left;
+  }
+  th {
+    background-color: #4a90e2;
+    color: white;
+  }
+  tr:nth-child(even) {
+    background-color: #f2f2f2;
+  }
+  h2 {
+    color: #333;
+    margin-top: 0;
+             }
