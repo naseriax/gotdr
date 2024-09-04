@@ -29,11 +29,16 @@ body {
     border-collapse: collapse;
     width: 100%;
     font-size: 12px;
+    table-layout: fixed;
   }
   th, td {
     border: 1px solid #e0e0e0;
     padding: 3px;
     text-align: left;
+    width: 50%; /* Add this line */
+    overflow: hidden; /* Add this line */
+    text-overflow: ellipsis; /* Add this line */
+    white-space: nowrap; /* Add this line */
   }
   th {
     background-color: #4a90e2;

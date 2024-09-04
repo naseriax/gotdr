@@ -266,7 +266,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
     <html>
     <head>
         <meta charset="utf-8">
-        <title>KPI Report</title>
+        <title>OTDR Report</title>
 		<link rel="stylesheet" href="style.css">
     </head>
     <body>
@@ -279,11 +279,10 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 	tmpl := template.Must(template.New("summary").Parse(`
  			</div>
             <div class="summary">
-                <h2>Summary</h2>
                 <table>
                     <thead>
                         <tr>
-                            <th>Fiber Attribute</th>
+                            <th>Fixed Parameters</th>
                             <th>Value</th>
                         </tr>
                     </thead>
@@ -324,9 +323,57 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
                             <td>Bellcore Version</td>
                             <td>{{.BLV}}</td>
                         </tr>
+                    </tbody>
+                </table>
+            </div>
+			<div class="summary">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Key events</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+					<tr>
+                        <td>Key events qty</td>
+                        <td>{{.KE}}</td>
+                    </tr>
+					</tbody>
+                </table>
+            </div>
+			<div class="summary">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supplier Parameters</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
 						<tr>
-                            <td>Key Events</td>
-                            <td>{{.KE}}</td>
+                            <td>OTDR Supplier</td>
+                            <td>{{.OS}}</td>
+                        </tr>
+						<tr>
+                            <td>OTDR Module Name</td>
+                            <td>{{.OMN}}</td>
+                        </tr>
+						<tr>
+                            <td>OTDR Name</td>
+                            <td>{{.ON}}</td>
+                        </tr>
+						<tr>
+                            <td>OTDR Software Version</td>
+                            <td>{{.OSV}}</td>
+                        </tr>
+						<tr>
+                            <td>OTDR Module Serial Number Version</td>
+                            <td>{{.OMS}}</td>
+                        </tr>
+						<tr>
+                            <td>OTDR other info</td>
+                            <td>{{.OOI}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -346,6 +393,12 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 		SQ   []int64
 		FLEN float64
 		BLV  float64
+		OS   string
+		ON   string
+		OSV  string
+		OMS  string
+		OOI  string
+		OMN  string
 		KE   int
 	}{
 		DT:   d.FixedParams.DateTime,
@@ -357,6 +410,12 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 		SQ:   d.FixedParams.SampleQTY,
 		FLEN: d.TotalLength,
 		BLV:  d.BellCoreVersion,
+		ON:   d.Supplier.OTDRName,
+		OMN:  d.Supplier.OTDRModuleName,
+		OS:   d.Supplier.OTDRSupplier,
+		OSV:  d.Supplier.OTDRswVersion,
+		OMS:  d.Supplier.OTDRModuleSN,
+		OOI:  d.Supplier.OTDROtherInfo,
 		KE:   len(d.Events),
 	}
 
@@ -412,19 +471,20 @@ func (d *otdrRawData) mapKeyEvents(events string) map[int][2]int {
 
 func (d *otdrRawData) GetNext(key string) string {
 	if _, exists := d.SecLocs[key]; !exists {
+		log.Println(key, "not found")
 		return ""
 	}
 
-	index := d.SecLocs[key][0]
+	index := d.SecLocs[key][1]
 	var nextKey string
 	nextIndex := math.Inf(1)
 
 	for k, v := range d.SecLocs {
-		if k == key || len(v) == 0 {
+		if k == key || len(v) < 2 {
 			continue
 		}
-		if float64(index) < float64(v[0]) && float64(v[0]) < nextIndex {
-			nextIndex = float64(v[0])
+		if float64(index) < float64(v[1]) && float64(v[1]) < nextIndex {
+			nextIndex = float64(v[1])
 			nextKey = k
 		}
 	}
@@ -477,6 +537,87 @@ func (d *otdrRawData) GetOrder() {
 	}
 
 	d.SecLocs = sectionLocations
+}
+
+func (d *otdrRawData) getSetupParams() {
+	// s := SetupParams{}
+
+	if len(d.SecLocs["SetupParams"]) == 0 {
+		log.Println("SetupParams section is missing")
+		return
+	}
+
+	setupparams := d.HexData[(d.SecLocs["SetupParams"][1]+10)*2 : (d.SecLocs[d.GetNext("SetupParams")][1] * 2)]
+
+	log.Println("setupParams", setupparams)
+}
+
+func (d *otdrRawData) getMiscParams() {
+	m := MiscParams{}
+
+	if len(d.SecLocs["MiscParams"]) == 0 {
+		log.Println("MiscParams section is missing")
+		return
+	}
+
+	slicedMiscParams := strings.Split(d.Decodedfile[d.SecLocs["MiscParams"][1]+10:d.SecLocs[d.GetNext("MiscParams")][1]], "\x00")[1:]
+
+	m.Mode = d.extractData(slicedMiscParams, 0)
+	m.FiberType = d.extractData(slicedMiscParams, 1)
+
+	d.MiscParams = m
+}
+
+func (d *otdrRawData) getAcqParam() {
+	// a :=AcqParam{}
+
+	if len(d.SecLocs["AcqParam"]) == 0 {
+		log.Println("AcqParam section is missing")
+		return
+	}
+
+	acqparam := d.HexData[(d.SecLocs["AcqParam"][1]+10)*2 : (d.SecLocs[d.GetNext("AcqParam")][1] * 2)]
+
+	log.Println("AcqParams", acqparam)
+}
+
+func (d *otdrRawData) getViewParams() {
+	// v :=ViewParams{}
+
+	if len(d.SecLocs["ViewParams"]) == 0 {
+		log.Println("ViewParams section is missing")
+		return
+	}
+
+	viewparams := d.HexData[(d.SecLocs["ViewParams"][1]+10)*2 : (d.SecLocs[d.GetNext("ViewParams")][1] * 2)]
+
+	log.Println("viewParams", viewparams)
+}
+
+func (d *otdrRawData) getAnalysisParams() {
+	// a :=AnalysisParams{}
+
+	if len(d.SecLocs["AnalysisParams"]) == 0 {
+		log.Println("AnalysisParams section is missing")
+		return
+	}
+
+	analyticsparams := d.HexData[(d.SecLocs["AnalysisParams"][1]+10)*2 : (d.SecLocs[d.GetNext("AnalysisParams")][1] * 2)]
+
+	log.Println("AnalyticsParams", analyticsparams)
+}
+
+func (d *otdrRawData) getSystemParams() {
+	// s :=SystemParams{}
+
+	if len(d.SecLocs["SystemParams"]) == 0 {
+		log.Println("SystemParams section is missing")
+		return
+	}
+
+	systemparams := d.HexData[(d.SecLocs["SystemParams"][1]+10)*2 : (d.SecLocs[d.GetNext("SystemParams")][1] * 2)]
+
+	log.Println("SystemParams", systemparams)
 }
 
 // getFixedParams function extracts the Fixed Parameters from the sor file and stores it in FixInfos struct.
@@ -745,6 +886,7 @@ func (d *otdrRawData) export2Json() {
 
 	var exportData = struct {
 		Filename        string            `json:"File Name"`
+		MiscParams      MiscParams        `json:"Misc Params"`
 		FixedParams     FixInfo           `json:"Fixed Parameters"`
 		TotalLoss       float64           `json:"Total Fiber Loss(dB)"`
 		TotalLength     float64           `json:"Fiber Length(km)"`
@@ -754,6 +896,7 @@ func (d *otdrRawData) export2Json() {
 		BellCoreVersion float64           `json:"Bellcore Version"`
 	}{
 		Filename:        d.Filename,
+		MiscParams:      d.MiscParams,
 		FixedParams:     d.FixedParams,
 		TotalLoss:       d.TotalLoss,
 		TotalLength:     d.TotalLength,
@@ -804,6 +947,12 @@ func ParseOTDRFile(args map[string]*string) {
 	d.getDataPoints()
 	d.getKeyEvents()
 	d.getFiberLength()
+	d.getSetupParams()
+	d.getMiscParams()
+	d.getViewParams()
+	d.getSystemParams()
+	d.getAnalysisParams()
+	d.getAcqParam()
 
 	if strings.EqualFold(*args["json"], "yes") {
 		d.export2Json()

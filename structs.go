@@ -17,6 +17,12 @@ type otdrRawData struct {
 	DataPoints      [][]float64
 	Distance        []float64
 	Power           []float64
+	MiscParams      MiscParams
+}
+
+type MiscParams struct {
+	Mode      string `json:"Scan Mode"`
+	FiberType string `json:"Fiber Type"`
 }
 
 // SupParam is the Supplier Parameters extracted from the sor file.
