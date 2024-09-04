@@ -261,7 +261,6 @@ func (d *otdrRawData) draw() {
 }
 
 func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
-	// HTML header
 	w.Write([]byte(`
     <!DOCTYPE html>
     <html>
@@ -275,7 +274,6 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
             <div class="chart">
     `))
 
-	// Render the chart
 	line.Render(w)
 
 	tmpl := template.Must(template.New("summary").Parse(`
@@ -368,7 +366,6 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 	}
 	htmlContent := buf.String()
 
-	// Add the summary table
 	w.Write([]byte(htmlContent))
 }
 
@@ -441,6 +438,8 @@ func (d *otdrRawData) GetOrder() {
 		"ExfoNewProprietaryBlock",
 		"Map",
 		"FxdParams",
+		"YokogawaSpecial",
+		"SetupParams",
 		"DataPts",
 		"NokiaParams",
 		"KeyEvents",
@@ -451,6 +450,11 @@ func (d *otdrRawData) GetOrder() {
 		"BlocOtdrPrivate",
 		"ActernaConfig",
 		"ActernaMiniCurve",
+		"AcqParam",
+		"ViewParams",
+		"SystemParams",
+		"AnalysisParams",
+		"MiscParams",
 		"JDSUEvenementsMTS",
 		"Cksum",
 	}
@@ -479,6 +483,11 @@ func (d *otdrRawData) GetOrder() {
 func (d *otdrRawData) getFixedParams() {
 
 	f := FixInfo{}
+
+	if len(d.SecLocs["FxdParams"]) == 0 {
+		log.Println("FxdParams section is missing")
+		return
+	}
 
 	fixInfo := d.HexData[(d.SecLocs["FxdParams"][1]+10)*2 : (d.SecLocs[d.GetNext("FxdParams")][1] * 2)]
 	p := 8
@@ -547,6 +556,11 @@ func (d *otdrRawData) getFixedParams() {
 }
 
 func (d *otdrRawData) getDataPoints() {
+
+	if len(d.SecLocs["DataPts"]) == 0 {
+		log.Println("DataPts section is missing")
+		return
+	}
 	dtpoints := d.HexData[d.SecLocs["DataPts"][1]*2 : d.SecLocs[d.GetNext("DataPts")][1]*2][40:]
 	var start int64 = 0
 	var cumulative_length float64 = 0
@@ -575,6 +589,11 @@ func (d *otdrRawData) getDataPoints() {
 // SupParams function extracts the Supplier Parameters from the sor file and stores it in SupParam struct.
 func (d *otdrRawData) getSupParams() {
 
+	if len(d.SecLocs["SupParams"]) == 0 {
+		log.Println("SupParams section is missing")
+		return
+	}
+
 	supString := strings.Split(d.Decodedfile[d.SecLocs["SupParams"][1]+10:d.SecLocs[d.GetNext("SupParams")][1]], "\x00")
 	slicedParams := supString[:len(supString)-1]
 
@@ -591,23 +610,37 @@ func (d *otdrRawData) getSupParams() {
 	d.Supplier = supInfo
 }
 
+func (d *otdrRawData) extractData(data []string, item int) string {
+	if len(data)-1 < item {
+		return ""
+	} else {
+		return strings.TrimSpace(data[item])
+	}
+}
+
 // GenParams function extracts the General Parameters from the sor file and stores it in GenParam struct.
 func (d *otdrRawData) getGenParams() {
+
+	if len(d.SecLocs["GenParams"]) == 0 {
+		log.Println("GenParams section is missing")
+		return
+	}
+
 	genStringBeforeSplit := strings.Split(d.Decodedfile[d.SecLocs["GenParams"][1]+10:d.SecLocs[d.GetNext("GenParams")][1]], "\x00")
 	genString := genStringBeforeSplit[:len(genStringBeforeSplit)-1]
 
 	genInfo := GenParam{
-		CableID:        strings.TrimSpace(genString[0][2:]),
-		Lang:           strings.TrimSpace(genString[0][:2]),
-		FiberID:        strings.TrimSpace(genString[1]),
-		LocationA:      strings.TrimSpace(genString[2][4:]),
-		LocationB:      strings.TrimSpace(genString[3]),
-		CableCode:      strings.TrimSpace(genString[4]),
-		BuildCondition: genString[5],
-		Operator:       strings.TrimSpace(genString[13]),
-		Comment:        strings.TrimSpace(genString[14]),
-		FiberType:      "G." + strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(genString[2][:2]))), 10),
-		OTDRWavelength: strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(genString[2][2:4]))), 10) + " nm",
+		CableID:        d.extractData(genString, 0)[2:],
+		Lang:           d.extractData(genString, 0)[:2],
+		FiberID:        d.extractData(genString, 1),
+		LocationA:      d.extractData(genString, 2)[4:],
+		LocationB:      d.extractData(genString, 3),
+		CableCode:      d.extractData(genString, 4),
+		BuildCondition: d.extractData(genString, 5),
+		Operator:       d.extractData(genString, 13),
+		Comment:        d.extractData(genString, 14),
+		FiberType:      "G." + strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(d.extractData(genString, 2)[:2]))), 10),
+		OTDRWavelength: strconv.FormatInt(parsHexValue(hex.EncodeToString([]byte(d.extractData(genString, 2)[2:4]))), 10) + " nm",
 	}
 
 	d.GenParams = genInfo
@@ -624,6 +657,11 @@ func (d *otdrRawData) getFiberLength() {
 
 // getBellCoreVersion reads the bellcore version from the sor file and returns it.
 func (d *otdrRawData) getBellCoreVersion() {
+
+	if len(d.SecLocs["Map"]) == 0 {
+		log.Println("Map section is missing")
+		return
+	}
 	d.BellCoreVersion = float64(parsHexValue(d.HexData[(d.SecLocs["Map"][0]+4)*2:(d.SecLocs["Map"][0]+5)*2])) / 100.0
 }
 
@@ -643,6 +681,10 @@ func (d *otdrRawData) getKeyEvents() {
 
 	d.Events = map[int]OTDREvent{}
 
+	if len(d.SecLocs["KeyEvents"]) == 0 {
+		log.Println("KeyEvents section is missing")
+		return
+	}
 	events := d.HexData[(d.SecLocs["KeyEvents"][1]+10)*2 : d.SecLocs[d.GetNext("KeyEvents")][1]*2]
 	p := d.mapKeyEvents(events)
 
