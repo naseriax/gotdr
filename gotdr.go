@@ -925,10 +925,14 @@ func getCliArgs() map[string]*string {
 
 	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no")
 	m["json"] = json
-
 	flag.Parse()
+	if len(*m["filePath"]) == 0 {
+		if len(os.Args) > 1 {
+			m["filePath"] = &os.Args[1]
+		}
+	}
 
-	if len(*filePath) == 0 {
+	if len(*m["filePath"]) == 0 {
 		log.Fatalln("no file has been specified")
 	}
 
