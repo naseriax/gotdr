@@ -773,16 +773,14 @@ func getCliArgs() map[string]*string {
 
 	m := map[string]*string{}
 
-	filePath := flag.String("sorfile", "", "Mandatory - Path to the sor file")
-	flag.StringVar(filePath, "s", "", "Mandatory - Path to the sor file")
+	filePath := flag.String("file", "", "Mandatory - Path to the sor file")
+
 	m["filePath"] = filePath
 
 	draw := flag.String("draw", "yes", "Optional - whether to draw the graph or not, yes , no")
-	flag.StringVar(draw, "d", "yes", "Optional - whether to draw the graph or not, yes , no")
 	m["draw"] = draw
 
 	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no")
-	flag.StringVar(json, "j", "yes", "Optional - whether to dump as json or not, yes , no")
 	m["json"] = json
 
 	flag.Parse()
