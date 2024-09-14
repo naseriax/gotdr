@@ -2,6 +2,15 @@ package main
 
 import "time"
 
+type csvFile struct {
+	Filename string  `json:"File Name"`
+	EOF      float64 `json:"Fiber Length(km)"`
+}
+
+type csvFiles struct {
+	Csvs []csvFile
+}
+
 type otdrRawData struct {
 	Filename        string `json:"File Name"`
 	Decodedfile     string

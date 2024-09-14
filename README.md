@@ -2,8 +2,7 @@
 - It's far from efficient or clean.
 - The graph generation has been added.
 
-- Usage:
-```
-#./gotdr -s filepath
-
-```
+### Usage:
+`./gotdr -file filepath -draw=yes -json=yes -csv=yes`
+Or
+`./gotdr -folder folderPath -draw=no -json=no -csv=yes`

@@ -12,6 +12,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -21,6 +22,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -267,7 +269,82 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
     <head>
         <meta charset="utf-8">
         <title>OTDR Report</title>
-		<link rel="stylesheet" href="style.css">
+		<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    background-color: #f0f0f0;
+    font-size: 16px;
+  }
+  
+  .container {
+    display: flex;
+    flex-direction: column;
+    background-color: #ffffff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  
+  .summary {
+    width: 100%;
+    background-color: #f9f9f9;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  
+  .chart {
+    width: 100%;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+    table-layout: fixed;
+  }
+  
+  th, td {
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  th {
+    background-color: #4a90e2;
+    color: white;
+    font-weight: bold;
+  }
+  
+  tr:nth-child(even) {
+    background-color: #f2f2f2;
+  }
+  
+  /* Responsive design */
+  @media (max-width: 768px) {
+    .container {
+      padding: 15px;
+    }
+  
+    th, td {
+      padding: 8px;
+      font-size: 12px;
+    }
+  }
+		</style>
+
     </head>
     <body>
         <div class="container">
@@ -290,6 +367,10 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
                         <tr>
                             <td>Date & Time</td>
                             <td>{{.DT}}</td>
+                        </tr>
+                        <tr>
+                            <td>Scan Range</td>
+                            <td>{{.SR}} m</td>
                         </tr>
                         <tr>
                             <td>Unit</td>
@@ -399,6 +480,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 		OMS  string
 		OOI  string
 		OMN  string
+		SR   []float64
 		KE   int
 	}{
 		DT:   d.FixedParams.DateTime,
@@ -409,6 +491,7 @@ func (d *otdrRawData) generateHTML(w io.Writer, line *charts.Line) {
 		PW:   d.FixedParams.PulseWidth,
 		SQ:   d.FixedParams.SampleQTY,
 		FLEN: d.TotalLength,
+		SR:   d.FixedParams.Range,
 		BLV:  d.BellCoreVersion,
 		ON:   d.Supplier.OTDRName,
 		OMN:  d.Supplier.OTDRModuleName,
@@ -539,11 +622,12 @@ func (d *otdrRawData) GetOrder() {
 	d.SecLocs = sectionLocations
 }
 
+// Under construction
 func (d *otdrRawData) getSetupParams() {
 	// s := SetupParams{}
 
 	if len(d.SecLocs["SetupParams"]) == 0 {
-		log.Println("SetupParams section is missing")
+		// log.Println("SetupParams section is missing")
 		return
 	}
 
@@ -552,11 +636,11 @@ func (d *otdrRawData) getSetupParams() {
 	log.Println("setupParams", setupparams)
 }
 
+// Under construction
 func (d *otdrRawData) getMiscParams() {
 	m := MiscParams{}
 
 	if len(d.SecLocs["MiscParams"]) == 0 {
-		log.Println("MiscParams section is missing")
 		return
 	}
 
@@ -568,11 +652,12 @@ func (d *otdrRawData) getMiscParams() {
 	d.MiscParams = m
 }
 
+// Under construction
 func (d *otdrRawData) getAcqParam() {
 	// a :=AcqParam{}
 
 	if len(d.SecLocs["AcqParam"]) == 0 {
-		log.Println("AcqParam section is missing")
+		// log.Println("AcqParam section is missing")
 		return
 	}
 
@@ -581,11 +666,12 @@ func (d *otdrRawData) getAcqParam() {
 	log.Println("AcqParams", acqparam)
 }
 
+// Under construction
 func (d *otdrRawData) getViewParams() {
 	// v :=ViewParams{}
 
 	if len(d.SecLocs["ViewParams"]) == 0 {
-		log.Println("ViewParams section is missing")
+		// log.Println("ViewParams section is missing")
 		return
 	}
 
@@ -594,11 +680,12 @@ func (d *otdrRawData) getViewParams() {
 	log.Println("viewParams", viewparams)
 }
 
+// Under construction
 func (d *otdrRawData) getAnalysisParams() {
 	// a :=AnalysisParams{}
 
 	if len(d.SecLocs["AnalysisParams"]) == 0 {
-		log.Println("AnalysisParams section is missing")
+		// log.Println("AnalysisParams section is missing")
 		return
 	}
 
@@ -607,11 +694,12 @@ func (d *otdrRawData) getAnalysisParams() {
 	log.Println("AnalyticsParams", analyticsparams)
 }
 
+// Under construction
 func (d *otdrRawData) getSystemParams() {
 	// s :=SystemParams{}
 
 	if len(d.SecLocs["SystemParams"]) == 0 {
-		log.Println("SystemParams section is missing")
+		// log.Println("SystemParams section is missing")
 		return
 	}
 
@@ -917,15 +1005,22 @@ func getCliArgs() map[string]*string {
 	m := map[string]*string{}
 
 	filePath := flag.String("file", "", "Mandatory - Path to the sor file")
-
 	m["filePath"] = filePath
+
+	folderath := flag.String("folder", "", "optional - Path to the folder containing sor files")
+	m["folderPath"] = folderath
 
 	draw := flag.String("draw", "yes", "Optional - whether to draw the graph or not, yes , no")
 	m["draw"] = draw
 
 	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no")
 	m["json"] = json
+
+	csv := flag.String("csv", "no", "Optional - whether to dump as csv or not, yes , no")
+	m["csv"] = csv
+
 	flag.Parse()
+
 	if len(*m["filePath"]) == 0 {
 		if len(os.Args) > 1 {
 			m["filePath"] = &os.Args[1]
@@ -939,40 +1034,112 @@ func getCliArgs() map[string]*string {
 	return m
 }
 
+func export2Csv(content csvFiles) {
+
+	file, err := os.Create("csv_output.csv")
+
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"Filename", "EoF"}); err != nil {
+		fmt.Println("Error writing header:", err)
+		return
+	}
+	for _, item := range content.Csvs {
+		if err := writer.Write([]string{filepath.Base(item.Filename), fmt.Sprintf("%.2f", item.EOF)}); err != nil {
+			fmt.Println("Error writing record:", err)
+			return
+		}
+	}
+
+	fmt.Println("CSV file created successfully")
+}
+
 func ParseOTDRFile(args map[string]*string) {
 
-	d := ReadSorFile(*args["filePath"])
-	d.GetOrder()
-	d.getBellCoreVersion()
-	d.getTotalLoss()
-	d.getSupParams()
-	d.getGenParams()
-	d.getFixedParams()
-	d.getDataPoints()
-	d.getKeyEvents()
-	d.getFiberLength()
-	d.getSetupParams()
-	d.getMiscParams()
-	d.getViewParams()
-	d.getSystemParams()
-	d.getAnalysisParams()
-	d.getAcqParam()
+	var files []string
+	var err error
 
-	if strings.EqualFold(*args["json"], "yes") {
-		d.export2Json()
+	csvContent := csvFiles{}
+
+	if *args["folderPath"] != "" {
+		files, err = getSorFilesPathFromFolder(*args["folderPath"])
+		nukeIfErr(err)
+	} else {
+		files = []string{*args["filePath"]}
 	}
 
-	//Draw the graph
-	if strings.EqualFold(*args["draw"], "yes") {
+	for _, f := range files {
 
-		d.draw()
+		d := ReadSorFile(f)
+		d.GetOrder()
+		d.getBellCoreVersion()
+		d.getTotalLoss()
+		d.getSupParams()
+		d.getGenParams()
+		d.getFixedParams()
+		d.getDataPoints()
+		d.getKeyEvents()
+		d.getFiberLength()
+
+		d.getSetupParams()
+		d.getMiscParams()
+		d.getViewParams()
+		d.getSystemParams()
+		d.getAnalysisParams()
+		d.getAcqParam()
+
+		if strings.EqualFold(*args["json"], "yes") {
+			d.export2Json()
+		}
+
+		if strings.EqualFold(*args["draw"], "yes") {
+			d.draw()
+		}
+
+		if strings.EqualFold(*args["csv"], "yes") {
+
+			csvContent.Csvs = append(csvContent.Csvs, csvFile{
+				Filename: d.Filename,
+				EOF:      d.TotalLength,
+			})
+		}
 	}
+
+	if strings.EqualFold(*args["csv"], "yes") {
+
+		export2Csv(csvContent)
+	}
+}
+
+func getSorFilesPathFromFolder(p string) ([]string, error) {
+	l := []string{}
+
+	err := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".sor" {
+			l = append(l, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return l, fmt.Errorf("error walking the path %v: %v", p, err)
+	}
+
+	return l, nil
 }
 
 func main() {
 
 	defer customPanicHandler()
-
-	args := getCliArgs()
-	ParseOTDRFile(args)
+	ParseOTDRFile(getCliArgs())
 }
