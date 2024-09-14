@@ -28,6 +28,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -1007,16 +1008,19 @@ func getCliArgs() map[string]*string {
 	filePath := flag.String("file", "", "Mandatory - Path to the sor file")
 	m["filePath"] = filePath
 
+	workers := flag.String("workers", "1", "Optional - Bulk processing workers quantity. Default=1")
+	m["workers"] = workers
+
 	folderath := flag.String("folder", "", "optional - Path to the folder containing sor files")
 	m["folderPath"] = folderath
 
-	draw := flag.String("draw", "yes", "Optional - whether to draw the graph or not, yes , no")
+	draw := flag.String("draw", "yes", "Optional - whether to draw the graph or not, yes , no. Default=yes")
 	m["draw"] = draw
 
-	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no")
+	json := flag.String("json", "yes", "Optional - whether to dump as json or not, yes , no. Default=yes")
 	m["json"] = json
 
-	csv := flag.String("csv", "no", "Optional - whether to dump as csv or not, yes , no")
+	csv := flag.String("csv", "no", "Optional - whether to dump as csv or not, yes , no. Default=no")
 	m["csv"] = csv
 
 	flag.Parse()
@@ -1065,6 +1069,11 @@ func ParseOTDRFile(args map[string]*string) {
 
 	var files []string
 	var err error
+	var wg sync.WaitGroup
+
+	workers, _ := strconv.Atoi(*args["workers"])
+
+	control_buffer := make(chan int, workers)
 
 	csvContent := csvFiles{}
 
@@ -1077,40 +1086,50 @@ func ParseOTDRFile(args map[string]*string) {
 
 	for _, f := range files {
 
-		d := ReadSorFile(f)
-		d.GetOrder()
-		d.getBellCoreVersion()
-		d.getTotalLoss()
-		d.getSupParams()
-		d.getGenParams()
-		d.getFixedParams()
-		d.getDataPoints()
-		d.getKeyEvents()
-		d.getFiberLength()
+		wg.Add(1)
+		control_buffer <- 1
 
-		d.getSetupParams()
-		d.getMiscParams()
-		d.getViewParams()
-		d.getSystemParams()
-		d.getAnalysisParams()
-		d.getAcqParam()
+		go func(control_buffer chan int, wg *sync.WaitGroup) {
+			d := ReadSorFile(f)
+			d.GetOrder()
+			d.getBellCoreVersion()
+			d.getTotalLoss()
+			d.getSupParams()
+			d.getGenParams()
+			d.getFixedParams()
+			d.getDataPoints()
+			d.getKeyEvents()
+			d.getFiberLength()
 
-		if strings.EqualFold(*args["json"], "yes") {
-			d.export2Json()
-		}
+			d.getSetupParams()
+			d.getMiscParams()
+			d.getViewParams()
+			d.getSystemParams()
+			d.getAnalysisParams()
+			d.getAcqParam()
 
-		if strings.EqualFold(*args["draw"], "yes") {
-			d.draw()
-		}
+			if strings.EqualFold(*args["json"], "yes") {
+				d.export2Json()
+			}
 
-		if strings.EqualFold(*args["csv"], "yes") {
+			if strings.EqualFold(*args["draw"], "yes") {
+				d.draw()
+			}
 
-			csvContent.Csvs = append(csvContent.Csvs, csvFile{
-				Filename: d.Filename,
-				EOF:      d.TotalLength,
-			})
-		}
+			if strings.EqualFold(*args["csv"], "yes") {
+
+				csvContent.Csvs = append(csvContent.Csvs, csvFile{
+					Filename: d.Filename,
+					EOF:      d.TotalLength,
+				})
+			}
+
+			wg.Done()
+			<-control_buffer
+		}(control_buffer, &wg)
 	}
+
+	wg.Wait()
 
 	if strings.EqualFold(*args["csv"], "yes") {
 
