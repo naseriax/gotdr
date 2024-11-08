@@ -7,4 +7,5 @@ gotdr
 make
 binaries
 binaries/*
-publish
+publish.sh
+publish.shs
