@@ -4,3 +4,6 @@
 gotdr
 *.html
 *.csv
+make
+binaries
+binaries/*

@@ -1079,9 +1079,20 @@ func ParseOTDRFile(args map[string]*string) {
 
 	if *args["folderPath"] != "" {
 		files, err = getSorFilesPathFromFolder(*args["folderPath"])
+		if strings.EqualFold(*args["json"], "yes") {
+			fmt.Println("json export is not supported with -folder arg")
+			*args["json"] = "no"
+		}
+		if strings.EqualFold(*args["draw"], "yes") {
+			fmt.Println("drawing the graph is not supported with -folder arg")
+			*args["draw"] = "no"
+		}
+
 		nukeIfErr(err)
 	} else {
 		files = []string{*args["filePath"]}
+		*args["json"] = "no"
+		*args["draw"] = "no"
 	}
 
 	for _, f := range files {
@@ -1144,7 +1155,7 @@ func getSorFilesPathFromFolder(p string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && filepath.Ext(path) == ".sor" {
+		if !info.IsDir() && (filepath.Ext(path) == ".sor" || filepath.Ext(path) == ".SOR") {
 			l = append(l, path)
 		}
 		return nil
