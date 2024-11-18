@@ -1091,8 +1091,6 @@ func ParseOTDRFile(args map[string]*string) {
 		nukeIfErr(err)
 	} else {
 		files = []string{*args["filePath"]}
-		*args["json"] = "no"
-		*args["draw"] = "no"
 	}
 
 	for _, f := range files {
@@ -1102,7 +1100,9 @@ func ParseOTDRFile(args map[string]*string) {
 
 		go func(control_buffer chan int, wg *sync.WaitGroup) {
 			d := ReadSorFile(f)
+			fmt.Println(1)
 			d.GetOrder()
+			fmt.Println(2)
 			d.getBellCoreVersion()
 			d.getTotalLoss()
 			d.getSupParams()
@@ -1111,6 +1111,7 @@ func ParseOTDRFile(args map[string]*string) {
 			d.getDataPoints()
 			d.getKeyEvents()
 			d.getFiberLength()
+			fmt.Println(3)
 
 			d.getSetupParams()
 			d.getMiscParams()
@@ -1120,15 +1121,16 @@ func ParseOTDRFile(args map[string]*string) {
 			d.getAcqParam()
 
 			if strings.EqualFold(*args["json"], "yes") {
+
 				d.export2Json()
 			}
 
 			if strings.EqualFold(*args["draw"], "yes") {
+
 				d.draw()
 			}
 
 			if strings.EqualFold(*args["csv"], "yes") {
-
 				csvContent.Csvs = append(csvContent.Csvs, csvFile{
 					Filename: d.Filename,
 					EOF:      d.TotalLength,
@@ -1170,6 +1172,6 @@ func getSorFilesPathFromFolder(p string) ([]string, error) {
 
 func main() {
 
-	defer customPanicHandler()
+	// defer customPanicHandler()
 	ParseOTDRFile(getCliArgs())
 }
